@@ -1,10 +1,12 @@
 {
 	"cSpell.words": [
 		"ATYP",
+		"daddr",
 		"dnsmasq",
 		"getsockopt",
 		"nftables",
 		"nodelay",
+		"prerouting",
 		"rdata",
 		"setcap",
 		"setsockopt",

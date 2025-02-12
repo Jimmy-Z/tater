@@ -16,7 +16,7 @@ Tater provides an alternative to
 		```
 	* nftables:
 		```
-		chain tproxy {
+		chain tproxy_prerouting {
 			type filter hook prerouting priority mangle
 			ip daddr 100.64.0.0/10 meta l4proto tcp tproxy to 127.0.0.1:1090
 		}
@@ -25,6 +25,7 @@ Tater provides an alternative to
 
 
 ## limitations
+* Linux only.
 * UDP is not supported, I don't really have a motivation.
 
 ## notes
