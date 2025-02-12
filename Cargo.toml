@@ -1,0 +1,22 @@
+[package]
+name = "tater"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = { version = "*", features = ["release_max_level_info"] }
+env_logger = "*"
+clap = { version = "*", features = ["derive"] }
+
+tokio = { version = "1", features = [
+	"net",
+	"rt",
+	"macros",
+	"signal",
+	"sync",
+	"io-util",
+	"time",
+] }
+socket2 = "*"
+
+hickory-proto = { version = "*", default-features = false }
