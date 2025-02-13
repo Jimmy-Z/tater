@@ -1,9 +1,11 @@
-Tater provides an alternative to
+Tater provides an lighter alternative to
 [potato routing](https://github.com/Jimmy-Z/potato-routing/).
 
 ## two services
 * fake DNS, resolves all domain names to `100.64.0.0/10`.
+	* and keeps a bi-direction map between domain name and (fake) address.
 * transparent proxy, forwards all received connection to an upstream SOCKS5 proxy.
+	* reverse lookup the domain name then pass that to SOCKS5.
 
 ## usage
 * `cargo run -- --help`

@@ -16,15 +16,17 @@ struct Entry {
 
 pub struct FakePool {
 	base: u32,
+	mask: u32,
 	current: u32,
 	entries: HashMap<Rc<str>, u32>,
 	reverse: HashMap<u32, Entry>,
 }
 
 impl FakePool {
-	pub fn new(base: Ipv4Addr, init_cap: usize) -> FakePool {
+	pub fn new(base: Ipv4Addr, cidr_len: u8, init_cap: usize) -> FakePool {
 		FakePool {
 			base: ip4_to_u32(base),
+			mask: (1 << (32 - cidr_len as u32)) - 1,
 			current: 0,
 			entries: HashMap::with_capacity(init_cap),
 			reverse: HashMap::with_capacity(init_cap),
@@ -36,9 +38,16 @@ impl FakePool {
 			// be aware, last_access is not updated here
 			Some(v) => *v,
 			_ => {
-				// to do: handle overflow
 				let n = self.current;
-				self.current += 1;
+				loop  {
+					self.current = (self.current + 1) & self.mask;
+					// no infinite loop, but it may overwrite existing entry
+					// but unlikely since the pool should be large enough
+					if !self.reverse.contains_key(&self.current) || self.current == n {
+						break;
+					}
+				}
+
 				let name: Rc<str> = Rc::from(name);
 				self.entries.insert(name.clone(), n);
 				self.reverse.insert(

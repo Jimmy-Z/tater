@@ -43,6 +43,7 @@ async fn main() {
 
 	let pool = Rc::new(RefCell::new(FakePool::new(
 		args.fake_pool_addr.parse().unwrap(),
+		args.fake_pool_cidr_len,
 		args.fake_pool_init_cap,
 	)));
 
