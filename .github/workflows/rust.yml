@@ -33,4 +33,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mint-${{ matrix.targets.name }}
-          path: target/release/${{ matrix.targets.target }}/mint${{ matrix.targets.suffix}}
+          path: target/${{ matrix.targets.target }}/release/mint${{ matrix.targets.suffix}}
