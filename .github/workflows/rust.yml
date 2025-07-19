@@ -29,6 +29,7 @@ jobs:
     runs-on: ${{ matrix.targets.runner }}
     steps:
       - uses: actions/checkout@v4
+      - run: echo $ANDROID_NDK_HOME
       - run: rustup target add ${{ matrix.targets.target }}
       - run: cargo test --verbose
       - name: Build mint release
