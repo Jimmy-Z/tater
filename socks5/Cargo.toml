@@ -1,0 +1,15 @@
+[package]
+name = "socks5"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = { version = "*", features = ["release_max_level_debug"] }
+# this is used in the demo server
+env_logger = "*"
+
+bytes = "1"
+tokio = { version = "1", default-features = false, features = ["io-util", "net", "rt", "macros"] }
+
+[dev-dependencies]
+rand = "*"
