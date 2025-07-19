@@ -72,7 +72,7 @@ async fn main() {
 			listen,
 			fake_header,
 		} => {
-			ls_run(server(psk, listen, &fake_header)).await;
+			ls_run(server(psk, listen, fake_header)).await;
 		}
 		Cmds::Client {
 			psk,
@@ -80,7 +80,7 @@ async fn main() {
 			server,
 			fake_header,
 		} => {
-			ls_run(client(psk, listen, server, &fake_header)).await;
+			ls_run(client(psk, listen, server, fake_header)).await;
 		}
 		Cmds::GenPSK => {
 			println!("{}", gen_psk::<Cipher>());
@@ -112,16 +112,16 @@ async fn server(key: &str, listen: &str, fake_header: &str) -> Option<()> {
 			else {
 				return;
 			};
-			info!("{} -> {}:{}", r_addr, addr, port);
-			let Ok(mut u) = TcpStream::connect(&format!("{}:{}", addr, port))
+			info!("{r_addr} -> {addr}:{port}");
+			let Ok(mut u) = TcpStream::connect(&format!("{addr}:{port}"))
 				.await
-				.map_err(|e| error!("error connecting to upstream: {}", e))
+				.map_err(|e| error!("error connecting to upstream: {e}"))
 			else {
 				return;
 			};
 			let _ = u.set_nodelay(true);
 			duplex(&cipher, &mut u, &mut s).await;
-			debug!("connection ended: {} -> {}:{}", r_addr, addr, port);
+			debug!("connection ended: {r_addr} -> {addr}:{port}");
 		});
 	}
 
@@ -134,11 +134,11 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 
 	let upstream: Vec<SocketAddr> = lookup_host(upstream_str)
 		.await
-		.inspect_err(|e| error!("failed to lookup {}: {}", upstream_str, e))
+		.inspect_err(|e| error!("failed to lookup {upstream_str}: {e}"))
 		.ok()?
 		.collect();
-	if upstream.len() == 0 {
-		error!("lookup {} yields no result", upstream_str);
+	if upstream.is_empty() {
+		error!("lookup {upstream_str} yields no result");
 		return None;
 	}
 	info!(
@@ -164,10 +164,10 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 			let Some(dst) = socks5::server_handshake(&mut s).await else {
 				return;
 			};
-			info!("{} -> {}", r_addr, dst);
+			info!("{r_addr} -> {dst}");
 			let Ok(mut u) = TcpStream::connect(&upstream as &[SocketAddr])
 				.await
-				.map_err(|e| error!("error connecting to upstream: {}", e))
+				.map_err(|e| error!("error connecting to upstream: {e}"))
 			else {
 				return;
 			};
@@ -185,7 +185,7 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 				return;
 			};
 			duplex(&cipher, &mut s, &mut u).await;
-			debug!("connection ended: {} -> {}", r_addr, dst);
+			debug!("connection ended: {r_addr} -> {dst}");
 		});
 	}
 

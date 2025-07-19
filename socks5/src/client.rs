@@ -1,4 +1,3 @@
-use log::*;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{addr::*, common::*};

@@ -39,27 +39,27 @@ async fn serv<T: ToSocketAddrs>(addr: T) {
 async fn handle(mut c: TcpStream, addr: SocketAddr) {
 	let _ = c.set_nodelay(true);
 	let Some(dst) = server_handshake(&mut c).await else {
-		error!("server handshake on connection from {} failed", addr);
+		error!("server handshake on connection from {addr} failed");
 		return;
 	};
 	info!("new connection {} -> {}", addr, &dst);
 	let dst_lu = dst.lookup().await;
-	if dst_lu.len() == 0 {
-		error!("lookup failed for {}", dst);
+	if dst_lu.is_empty() {
+		error!("lookup failed for {dst}");
 		return;
 	}
 	let Ok(mut u) = TcpStream::connect(&dst_lu[..]).await.inspect_err(|e| {
-		error!("connect to {} failed: {}", dst, e);
+		error!("connect to {dst} failed: {e}");
 	}) else {
 		return;
 	};
 	let _ = u.set_nodelay(true);
 	match copy_bidirectional(&mut c, &mut u).await {
 		Ok((u, d)) => {
-			info!("{} -> {} {}/{} bytes u/d", addr, dst, u, d);
+			info!("{addr} -> {dst} {u}/{d} bytes u/d");
 		}
 		Err(e) => {
-			error!("{} -> {} pipe error: {}", addr, dst, e);
+			error!("{addr} -> {dst} pipe error: {e}");
 		}
 	}
 }

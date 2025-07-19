@@ -15,7 +15,7 @@ pub async fn server_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 	// VER NMETHODS
 	io.read_exact(&mut buf[0..2])
 		.await
-		.inspect_err(|e| error!("failed to read client hello: {}", e))
+		.inspect_err(|e| error!("failed to read client hello: {e}"))
 		.ok()?;
 
 	// HTTP CONNECT support
@@ -29,20 +29,20 @@ pub async fn server_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 		_ = io
 			.read_u8()
 			.await
-			.inspect_err(|e| error!("failed to read client auth methods: {}", e));
+			.inspect_err(|e| error!("failed to read client auth methods: {e}"));
 	}
 
 	buf[0] = SOCKS5_VER;
 	buf[1] = SOCKS5_NO_AUTH_REQUIRED;
 	io.write_all(&buf[..2])
 		.await
-		.inspect_err(|e| error!("failed to write auth method choice: {}", e))
+		.inspect_err(|e| error!("failed to write auth method choice: {e}"))
 		.ok()?;
 
 	// VER CMD RSV
 	io.read_exact(&mut buf[0..3])
 		.await
-		.inspect_err(|e| error!("failed to read client request: {}", e))
+		.inspect_err(|e| error!("failed to read client request: {e}"))
 		.ok()?;
 	expect("VER", buf[0], SOCKS5_VER)?;
 	expect("RSV", buf[2], SOCKS5_RSV)?;
@@ -71,7 +71,7 @@ async fn reply<T: AsyncRead + AsyncWrite + Unpin>(
 	buf[3] = SOCKS5_ATYP_V4;
 	io.write_all(&buf[..REP_LEN])
 		.await
-		.inspect_err(|e| error!("error writting REP: {}", e))
+		.inspect_err(|e| error!("error writting REP: {e}"))
 }
 
 const EOH: &[u8] = b"\r\n\r\n";
@@ -96,7 +96,7 @@ pub async fn connect_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 	}
 
 	let req = str::from_utf8(&buf)
-		.inspect_err(|e| error!("error converting req to string: {}", e))
+		.inspect_err(|e| error!("error converting req to string: {e}"))
 		.ok()?;
 
 	// get 1st line, headers are ignored
@@ -107,7 +107,7 @@ pub async fn connect_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 		.split(' ')
 		.collect::<Vec<_>>()
 		.try_into()
-		.inspect_err(|_| error!("error parsing request line: {}", req))
+		.inspect_err(|_| error!("error parsing request line: {req}"))
 		.ok()?;
 
 	// "CO" ate in socks5_handshake for protocol identification
@@ -133,7 +133,7 @@ pub async fn connect_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 
 	io.write_all(RES_OK)
 		.await
-		.inspect_err(|e| error!("error writing response to client: {}", e))
+		.inspect_err(|e| error!("error writing response to client: {e}"))
 		.ok()?;
 
 	Some(dst)

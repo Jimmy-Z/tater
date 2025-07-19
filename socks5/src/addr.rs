@@ -35,16 +35,16 @@ impl<'a> Display for Addr<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::DomainOwned(d) => {
-				write!(f, "{}", &d)
+				write!(f, "{d}")
 			}
 			Self::Domain(d) => {
-				write!(f, "{}", d)
+				write!(f, "{d}")
 			}
 			Self::V4(a) => {
-				write!(f, "{}", a)
+				write!(f, "{a}")
 			}
 			Self::V6(a) => {
-				write!(f, "{}", a)
+				write!(f, "{a}")
 			}
 		}
 	}
@@ -98,7 +98,7 @@ impl<'a> Dst<'a> {
 	pub async fn lookup(&self) -> Vec<SocketAddr> {
 		match &self.addr {
 			Addr::Domain(d) => lookup(d, self.port).await,
-			Addr::DomainOwned(d) => lookup(&d, self.port).await,
+			Addr::DomainOwned(d) => lookup(d, self.port).await,
 			Addr::V4(a) => vec![SocketAddr::new(IpAddr::V4(*a), self.port)],
 			Addr::V6(a) => vec![SocketAddr::new(IpAddr::V6(*a), self.port)],
 		}
@@ -109,7 +109,7 @@ async fn lookup(d: &str, port: u16) -> Vec<SocketAddr> {
 	match tokio::net::lookup_host((d, port)).await {
 		Ok(iter) => iter.collect(),
 		Err(e) => {
-			error!("error trying to lookup {}: {}", d, e);
+			error!("error trying to lookup {d}: {e}");
 			Vec::new()
 		}
 	}
@@ -121,22 +121,22 @@ pub async fn read_dst<'a, T: AsyncRead + Unpin>(r: &mut T) -> Option<Dst<'a>> {
 	let atyp = r
 		.read_u8()
 		.await
-		.inspect_err(|e| error!("failed to read ATYP: {}", e))
+		.inspect_err(|e| error!("failed to read ATYP: {e}"))
 		.ok()?;
 	let addr: Addr = match atyp {
 		SOCKS5_ATYP_DOMAINNAME => {
 			let addr_len = r
 				.read_u8()
 				.await
-				.inspect_err(|e| error!("failed to read DST.ADDR: {}", e))
+				.inspect_err(|e| error!("failed to read DST.ADDR: {e}"))
 				.ok()?;
 			r.read_exact(&mut buf[..(addr_len as usize)])
 				.await
-				.inspect_err(|e| error!("failed to read DST.ADDR(DOMAINNAME): {}", e))
+				.inspect_err(|e| error!("failed to read DST.ADDR(DOMAINNAME): {e}"))
 				.ok()?;
 			Addr::DomainOwned(
 				std::str::from_utf8(&buf[..(addr_len as usize)])
-					.inspect_err(|e| error!("invalid DST.ADDR(DOMAINNAME): {}", e))
+					.inspect_err(|e| error!("invalid DST.ADDR(DOMAINNAME): {e}"))
 					.ok()?
 					.to_string(),
 			)
@@ -144,26 +144,26 @@ pub async fn read_dst<'a, T: AsyncRead + Unpin>(r: &mut T) -> Option<Dst<'a>> {
 		SOCKS5_ATYP_V4 => {
 			r.read_exact(&mut buf[..4])
 				.await
-				.inspect_err(|e| error!("failed to read DST.ADDR(IPV4): {}", e))
+				.inspect_err(|e| error!("failed to read DST.ADDR(IPV4): {e}"))
 				.ok()?;
 			Addr::V4(Ipv4Addr::from(<[u8; 4]>::try_from(&buf[..4]).unwrap()))
 		}
 		SOCKS5_ATYP_V6 => {
 			r.read_exact(&mut buf[..16])
 				.await
-				.inspect_err(|e| error!("failed to read DST.ADDR(IPV6): {}", e))
+				.inspect_err(|e| error!("failed to read DST.ADDR(IPV6): {e}"))
 				.ok()?;
 			Addr::V6(Ipv6Addr::from(<[u8; 16]>::try_from(&buf[..16]).unwrap()))
 		}
 		_ => {
-			error!("invalid ATYP {}", atyp);
+			error!("invalid ATYP {atyp}");
 			return None;
 		}
 	};
 	let port: u16 = r
 		.read_u16()
 		.await
-		.inspect_err(|e| error!("failed to read DST.PORT: {}", e))
+		.inspect_err(|e| error!("failed to read DST.PORT: {e}"))
 		.ok()?;
 	Some(Dst { addr, port })
 }
@@ -175,34 +175,34 @@ pub async fn write_dst<'a, T: AsyncWrite + Unpin>(w: &mut T, dst: &Dst<'a>) -> O
 		Addr::V4(addr) => {
 			w.write_u8(SOCKS5_ATYP_V4)
 				.await
-				.inspect_err(|e| error!("failed to write ATYP: {}", e))
+				.inspect_err(|e| error!("failed to write ATYP: {e}"))
 				.ok()?;
 			w.write_all(&addr.octets())
 				.await
-				.inspect_err(|e| error!("failed to write DST.ADDR(IPV4): {}", e))
+				.inspect_err(|e| error!("failed to write DST.ADDR(IPV4): {e}"))
 				.ok()?;
 		}
 		Addr::V6(addr) => {
 			w.write_u8(SOCKS5_ATYP_V6)
 				.await
-				.inspect_err(|e| error!("failed to write ATYP: {}", e))
+				.inspect_err(|e| error!("failed to write ATYP: {e}"))
 				.ok()?;
 			w.write_all(&addr.octets())
 				.await
-				.inspect_err(|e| error!("failed to write DST.ADDR(IPV6): {}", e))
+				.inspect_err(|e| error!("failed to write DST.ADDR(IPV6): {e}"))
 				.ok()?;
 		}
 	}
 	w.write_u16(dst.port)
 		.await
-		.inspect_err(|e| error!("failed to write DST.PORT: {}", e))
+		.inspect_err(|e| error!("failed to write DST.PORT: {e}"))
 		.ok()
 }
 
 pub async fn write_domain<T: AsyncWrite + Unpin>(w: &mut T, d: &str) -> Option<()> {
 	w.write_u8(SOCKS5_ATYP_DOMAINNAME)
 		.await
-		.inspect_err(|e| error!("failed to write ATYP: {}", e))
+		.inspect_err(|e| error!("failed to write ATYP: {e}"))
 		.ok()?;
 	let bytes = d.as_bytes();
 	if bytes.len() >= 0x100 {
@@ -215,11 +215,11 @@ pub async fn write_domain<T: AsyncWrite + Unpin>(w: &mut T, d: &str) -> Option<(
 	}
 	w.write_u8(bytes.len() as u8)
 		.await
-		.inspect_err(|e| error!("failed to write DST.ADDR len: {}", e))
+		.inspect_err(|e| error!("failed to write DST.ADDR len: {e}"))
 		.ok()?;
 	w.write_all(bytes)
 		.await
-		.inspect_err(|e| error!("failed to write DST.ADDR(DOMAINNAME): {}", e))
+		.inspect_err(|e| error!("failed to write DST.ADDR(DOMAINNAME): {e}"))
 		.ok()
 }
 

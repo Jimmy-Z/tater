@@ -17,7 +17,7 @@ use std::fmt::Display;
 
 pub fn expect<T: Display + Eq>(name: impl Display, v: T, exp: T) -> Option<()> {
 	if v != exp {
-		error!("invalid {}, expecting {}, got {}", name, exp, v);
+		error!("invalid {name}, expecting {exp}, got {v}");
 		None
 	} else {
 		Some(())

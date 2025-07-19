@@ -24,18 +24,15 @@ pub async fn client_handshake<
 	write_msg(buf, cipher, header, &Req(host, port));
 	io.write_all(buf)
 		.await
-		.map_err(|e| debug!("handshake error writing: {}", e))
+		.map_err(|e| debug!("handshake error writing: {e}"))
 		.ok()?;
 
 	buf.clear();
 	io.read_buf(buf)
 		.await
-		.map_err(|e| debug!("handshake error reading: {}", e))
+		.map_err(|e| debug!("handshake error reading: {e}"))
 		.ok()?;
-	let Some(resp): Option<Resp> = read_msg(buf, cipher) else {
-		return None;
-	};
-
+	let resp: Resp = read_msg(buf, cipher)?;
 	if resp.0 != REP_OK {
 		debug!("server replies 0x{:02x}, unexpected", resp.0);
 		return None;
@@ -56,11 +53,9 @@ pub async fn server_handshake<
 	buf.clear();
 	io.read_buf(buf)
 		.await
-		.map_err(|e| debug!("handshake error reading: {}", e))
+		.map_err(|e| debug!("handshake error reading: {e}"))
 		.ok()?;
-	let Some(req): Option<Req> = read_msg(buf, cipher) else {
-		return None;
-	};
+	let req: Req = read_msg(buf, cipher)?;
 
 	let host = req.0.to_owned();
 	let port = req.1;
@@ -69,7 +64,7 @@ pub async fn server_handshake<
 	write_msg(buf, cipher, header, &Resp(REP_OK));
 	io.write_all(buf)
 		.await
-		.map_err(|e| debug!("handshake error writing: {}", e))
+		.map_err(|e| debug!("handshake error writing: {e}"))
 		.ok()?;
 
 	// debug!("buf capacity: {}", buf.capacity());
@@ -127,11 +122,11 @@ fn read_msg<'a, C: AeadCore + AeadInPlace, T: Payload<'a>>(
 	}
 	let mut payload = buf.split_off(payload_offset);
 	if let Err(e) = cipher.decrypt_in_place(
-		&Nonce::<C>::from_slice(&buf[nonce_offset..nonce_offset + nonce_size::<C>()]),
+		Nonce::<C>::from_slice(&buf[nonce_offset..nonce_offset + nonce_size::<C>()]),
 		b"",
 		&mut payload,
 	) {
-		debug!("failed to decrypt message, likely invalid: {}", e);
+		debug!("failed to decrypt message, likely invalid: {e}");
 		return None;
 	}
 	buf.unsplit(payload);
@@ -164,7 +159,7 @@ impl<'a> Payload<'a> for Req<'a> {
 		}
 		let ver = buf[0];
 		if ver != VER {
-			error!("invalid ver: 0x{:02x}", ver);
+			error!("invalid ver: 0x{ver:02x}");
 			return None;
 		}
 		let len = buf[1];
@@ -194,7 +189,7 @@ impl<'a> Payload<'a> for Resp {
 		buf.put_u8(self.0);
 	}
 	fn read(buf: &'a [u8]) -> Option<Self> {
-		if buf.len() < 1 {
+		if buf.is_empty() {
 			error!("invalid response length: {}", buf.len());
 			return None;
 		}
@@ -219,7 +214,7 @@ async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + U
 	let payload_offset = buf.len();
 
 	if let Err(e) = plain.read_buf(buf).await {
-		debug!("failed to read plain data: {}", e);
+		debug!("failed to read plain data: {e}");
 		return None;
 	}
 	let mut payload = buf.split_off(payload_offset);
@@ -231,20 +226,20 @@ async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + U
 
 	let nonce = C::generate_nonce(&mut AeadOsRng);
 	if let Err(e) = cipher.encrypt_in_place(&nonce, b"", &mut payload) {
-		error!("failed to encrypt: {}", e);
+		error!("failed to encrypt: {e}");
 		return None;
 	}
 	// write nonce
-	(&mut buf[..nonce_size::<C>()]).copy_from_slice(&nonce);
+	buf[..nonce_size::<C>()].copy_from_slice(&nonce);
 	// write length
 	let len = obfuscate(payload.len() as u16, &nonce).to_be_bytes();
-	(&mut buf[nonce_size::<C>()..]).copy_from_slice(&len);
+	buf[nonce_size::<C>()..].copy_from_slice(&len);
 	buf.unsplit(payload);
 
 	encrypted
 		.write_all(buf)
 		.await
-		.inspect_err(|e| debug!("failed to write encrypted data: {}", e))
+		.inspect_err(|e| debug!("failed to write encrypted data: {e}"))
 		.ok()
 }
 
@@ -257,14 +252,14 @@ async fn dec1<C: AeadCore + AeadInPlace, P: AsyncWrite + Unpin, E: AsyncRead + U
 ) -> Option<()> {
 	let mut nonce = Nonce::<C>::default();
 	if let Err(e) = encrypted.read_exact(&mut nonce).await {
-		debug!("failed to read nonce: {}", e);
+		debug!("failed to read nonce: {e}");
 		return None;
 	}
 
 	let len = encrypted
 		.read_u16()
 		.await
-		.map_err(|e| debug!("failed to read len: {}", e))
+		.map_err(|e| debug!("failed to read len: {e}"))
 		.ok()?;
 	let len = obfuscate(len, &nonce);
 	if len == 0 {
@@ -275,12 +270,12 @@ async fn dec1<C: AeadCore + AeadInPlace, P: AsyncWrite + Unpin, E: AsyncRead + U
 	buf.resize(len as usize, 0);
 
 	if let Err(e) = encrypted.read_exact(buf).await {
-		error!("failed to read payload: {}", e);
+		error!("failed to read payload: {e}");
 		return None;
 	}
 
 	if let Err(e) = cipher.decrypt_in_place(&nonce, b"", buf) {
-		error!("failed to decrypt payload: {}", e);
+		error!("failed to decrypt payload: {e}");
 		return None;
 	}
 
@@ -288,7 +283,7 @@ async fn dec1<C: AeadCore + AeadInPlace, P: AsyncWrite + Unpin, E: AsyncRead + U
 		.write_all(buf)
 		.await
 		.map_err(|e| {
-			error!("failed to write decrypted payload: {}", e);
+			error!("failed to write decrypted payload: {e}");
 		})
 		.ok()
 }
@@ -331,13 +326,13 @@ pub async fn simplex<
 		drop(buf);
 		copy(r, w)
 			.await
-			.inspect_err(|e| debug!("error copying: {}", e))
+			.inspect_err(|e| debug!("error copying: {e}"))
 			.ok()
 	}
 	.await;
 	w.shutdown()
 		.await
-		.inspect_err(|e| debug!("error shutting down: {}", e))
+		.inspect_err(|e| debug!("error shutting down: {e}"))
 		.ok()
 }
 
