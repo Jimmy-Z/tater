@@ -3,10 +3,6 @@ name = "mint"
 version = "0.1.0"
 edition = "2024"
 
-[profile.release]
-lto = true
-strip = true
-
 [dependencies]
 clap = { version = "4", features = ["derive", "string"] }
 log = { version = "*", features = ["release_max_level_debug"] }
