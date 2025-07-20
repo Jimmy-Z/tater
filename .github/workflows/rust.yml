@@ -22,20 +22,12 @@ jobs:
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             suffix: ".exe"
-          - name: android-aarch64
-            runner: ubuntu-latest
-            target: aarch64-linux-android
-            suffix: ""
     runs-on: ${{ matrix.targets.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo $ANDROID_NDK_HOME
-      - run: rustup target add ${{ matrix.targets.target }}
       - run: cargo test --verbose
-      - name: Build mint release
-        run: cargo build --release --target ${{ matrix.targets.target}} -p mint
-      - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+      - run: cargo build --release --target ${{ matrix.targets.target}} -p mint
+      - uses: actions/upload-artifact@v4
         with:
           name: mint-${{ matrix.targets.name }}
           path: target/${{ matrix.targets.target }}/release/mint${{ matrix.targets.suffix}}
