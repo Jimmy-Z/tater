@@ -15,44 +15,54 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo test --verbose
-  build:
+  # instead of using a big matrix and conditional steps, this is clearer
+  build-linux:
     needs: [test]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        targets:
-          - name: linux-x86_64
-            runner: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            suffix: ""
-          - name: windows-x86_64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: ".exe"
-          - name: android-aarch64
-            runner: ubuntu-latest
-            target: aarch64-linux-android
-            suffix: ""
-    runs-on: ${{ matrix.targets.runner }}
+        arch: [x86_64]
+        package: [mint]
+    env:
+      target: ${{ matrix.arch }}-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
-
-      # get git rev
-      - if: runner.os != 'Windows'
-        run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - if: runner.os == 'Windows'
-        run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
-
-      - run: rustup target add ${{ matrix.targets.target }}
-
-      - if: ${{ matrix.targets.name == 'android-aarch64' }}
-        run: cargo install cargo-ndk
-      - if: ${{ matrix.targets.name == 'android-aarch64' }}
-        run: cargo ndk -t arm64-v8a build --release
-
-      - if: ${{ matrix.targets.name != 'android-aarch64' }}
-        run: cargo build --release --target ${{ matrix.targets.target }} -p mint
-
+      - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - run: rustup target add ${{ env.target }}
+      - run: cargo build --release --target ${{ env.target }} -p ${{ matrix.package }}
       - uses: actions/upload-artifact@v4
         with:
-          name: mint-${{ matrix.targets.name }}-${{ env.REV_SHORT }}
-          path: target/${{ matrix.targets.target }}/release/mint${{ matrix.targets.suffix}}
+          name: ${{ matrix.package }}-linux-${{ matrix.arch }}-${{ env.GIT_REV_SHORT }}
+          path: target/${{ env.target }}/release/${{ matrix.package }}
+  build-windows:
+    needs: [test]
+    runs-on: windows-latest
+    env:
+      target: x86_64-pc-windows-msvc
+      package: mint
+    steps:
+      - uses: actions/checkout@v4
+      # note: this step is a little different on windows
+      - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
+      - run: rustup target add ${{ env.target }}
+      - run: cargo build --release --target ${{ env.target }} -p ${{ env.package }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.package }}-windows-x86_64-${{ env.GIT_REV_SHORT }}
+          path: target/${{ env.target }}/release/${{ env.package }}.exe
+  build-android:
+    needs: [test]
+    runs-on: ubuntu-latest
+    env:
+      target: aarch64-linux-android
+      package: mint
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - run: rustup target add ${{ env.target }}
+      - run: cargo install cargo-ndk
+      - run: cargo ndk -t ${{ env.target }} build --release - p ${{ env.package }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.package }}-android-aarch64-${{ env.GIT_REV_SHORT }}
+          path: target/${{ env.target }}/release/${{ env.package }}

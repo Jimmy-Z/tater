@@ -8,7 +8,7 @@ lto = true
 strip = true
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "string"] }
 log = { version = "*", features = ["release_max_level_debug"] }
 env_logger = "*"
 
@@ -19,4 +19,4 @@ chacha20poly1305 = "*"
 aead = { version = "*", features = ["bytes"] }
 base64 = "*"
 
-socks5 = {path = "../socks5"}
+socks5 = { path = "../socks5" }

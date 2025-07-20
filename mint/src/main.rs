@@ -14,7 +14,20 @@ mod proto;
 use key::*;
 use proto::*;
 
+// I want to implement this as const fn () -> &'static str,
+// so that we won't need clap's string feature.
+// but concat! supports only literals, not consts.
+// there is const_format or build.rs, but I think they're overkill
+fn ver() -> String {
+	format!(
+		"v{} rev-{}",
+		env!("CARGO_PKG_VERSION"),
+		option_env!("GIT_REV_SHORT").unwrap_or("N/A"),
+	)
+}
+
 #[derive(Parser)]
+#[command(version = ver())]
 struct Args {
 	#[command(subcommand)]
 	cmd: Cmds,
