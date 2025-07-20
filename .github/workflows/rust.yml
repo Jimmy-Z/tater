@@ -1,4 +1,4 @@
-name: Rust
+name: Rust Linux/Windows
 
 on:
   push:
@@ -29,5 +29,5 @@ jobs:
       - run: cargo build --release --target ${{ matrix.targets.target}} -p mint
       - uses: actions/upload-artifact@v4
         with:
-          name: mint-${{ matrix.targets.name }}
+          name: mint-${{ matrix.targets.name }}-${{ github.sha_short }}
           path: target/${{ matrix.targets.target }}/release/mint${{ matrix.targets.suffix}}
