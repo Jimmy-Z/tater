@@ -10,6 +10,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo test --verbose
   build:
     strategy:
       matrix:
@@ -29,17 +33,23 @@ jobs:
     runs-on: ${{ matrix.targets.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - if: ${{ matrix.targets.name == 'linux-x86_64' }}
-        run: cargo test --verbose
-      - if: ${{ matrix.targets.name == 'android-aarch64' }}
-        run: rustup target add ${{ matrix.targets.target }}
+
+      # get git rev
+      - if: runner.os == 'Linux'
+        run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - if: runner.os == 'Windows'
+        run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
+
+      - run: rustup target add ${{ matrix.targets.target }}
+
       - if: ${{ matrix.targets.name == 'android-aarch64' }}
         run: cargo install cargo-ndk
       - if: ${{ matrix.targets.name == 'android-aarch64' }}
         run: cargo ndk -t arm64-v8a build --release
+
       - if: ${{ matrix.targets.name != 'android-aarch64' }}
         run: cargo build --release --target ${{ matrix.targets.target }} -p mint
+
       - uses: actions/upload-artifact@v4
         with:
           name: mint-${{ matrix.targets.name }}-${{ env.REV_SHORT }}
