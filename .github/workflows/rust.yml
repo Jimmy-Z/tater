@@ -29,7 +29,7 @@ jobs:
     runs-on: ${{ matrix.targets.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "SHA_SHORT=`git rev-parse --short HEAD`" >> $GITHUB_ENV
+      - run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - if: ${{ matrix.targets.name == 'linux-x86_64' }}
         run: cargo test --verbose
       - if: ${{ matrix.targets.name == 'android-aarch64' }}
