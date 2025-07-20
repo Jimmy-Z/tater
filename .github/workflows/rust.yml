@@ -29,7 +29,7 @@ jobs:
     runs-on: ${{ matrix.targets.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - run: echo "REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - if: ${{ matrix.targets.name == 'linux-x86_64' }}
         run: cargo test --verbose
       - if: ${{ matrix.targets.name == 'android-aarch64' }}
@@ -42,5 +42,5 @@ jobs:
         run: cargo build --release --target ${{ matrix.targets.target }} -p mint
       - uses: actions/upload-artifact@v4
         with:
-          name: mint-${{ matrix.targets.name }}-${SHA_SHORT}
+          name: mint-${{ matrix.targets.name }}-${{ env.REV_SHORT }}
           path: target/${{ matrix.targets.target }}/release/mint${{ matrix.targets.suffix}}
