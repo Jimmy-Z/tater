@@ -11,7 +11,7 @@ fn main() -> std::io::Result<()> {
 		println!("{len} bytes from {addr}");
 		if let Ok(mut msg) = Msg::try_from((&mut buf[..], len)) {
 			println!("{msg}");
-			let len = msg.response_with(|_| Some((Ipv4Addr::new(127, 0, 0, 1), 1)));
+			let len = msg.response_with(|_| Some((Ipv4Addr::new(127, 25, 0, 1), 42)));
 			if len > 0 {
 				println!("{len} bytes to {addr}");
 				let msg = Msg::try_from((&mut buf[..], len)).unwrap();

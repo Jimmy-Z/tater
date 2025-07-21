@@ -11,8 +11,7 @@ in an eye-balling test, it consumes about 1/3 CPU compared to stunnel under the 
 it works for me, but no warranty.
 
 ## but it works _like_ a tunnel
-specifically, like https://www.stunnel.org/socksvpn.html,
-minus the transparent part, similar functionaly is implemented in tater.
+tunnel as something like ssh `-D` or stunnel `protocol = socks`
 * aside from the no encryption part, socks handling is on the client side,
 which improves handshake latency compared to stunnel.
 * aside from socks5, HTTP CONNECT is also supported.

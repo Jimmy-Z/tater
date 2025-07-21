@@ -13,49 +13,23 @@ type Resolver = fn(&[&[u8]]) -> Option<(Ipv4Addr, u32)>;
 // 	parse query
 // 	write response (in-place), with 1 A record
 
-const DNS_HEADER_LEN: usize = 12;
-
-// bit offsets
-// in rfc1035 4.1.1, 0 is actually the highest bit
-const FLAG_O_QR: u8 = 7;
-const FLAG_O_AA: u8 = 2;
-const FLAG_O_TC: u8 = 1;
-const FLAG_O_RD: u8 = 0;
-const FLAG_O_RA: u8 = 7; // high
-
 pub struct Msg<'a> {
 	msg: &'a mut [u8],
 	len: usize,
 }
 
 impl<'a> Msg<'a> {
-	fn id(&self) -> u16 {
-		u16be(&self.msg[0..2])
-	}
-	fn qd_count(&self) -> u16 {
-		u16be(&self.msg[4..6])
-	}
-	fn an_count(&self) -> u16 {
-		u16be(&self.msg[6..8])
-	}
-	fn ns_count(&self) -> u16 {
-		u16be(&self.msg[8..10])
-	}
-	fn ar_count(&self) -> u16 {
-		u16be(&self.msg[10..12])
-	}
-
 	// write response in-place
 	pub fn response_with(&mut self, resolver: Resolver) -> usize {
 		// check headers
 		if self.opcode() != OPCODE_QUERY {
 			self.set_response();
-			self.set_rcode(RCODE_NOIMPL);
+			self.set_rcode(RCODE_NOTIMP);
 			return self.len;
 		}
 		if self.qd_count() < 1 {
 			self.set_response();
-			self.set_rcode(RCODE_FMTERR);
+			self.set_rcode(RCODE_FORMERR);
 			return self.len;
 		}
 
@@ -95,7 +69,7 @@ impl<'a> Msg<'a> {
 		);
 		if qtype != TYPE_A || qclass != CLASS_IN {
 			self.set_response();
-			self.set_rcode(RCODE_NOIMPL);
+			self.set_rcode(RCODE_NOTIMP);
 			return self.len;
 		}
 		let Some((addr, ttl)) = resolver(&name) else {
@@ -107,9 +81,10 @@ impl<'a> Msg<'a> {
 			return self.len;
 		};
 		// start writting response
-		self.set_response_header(RCODE_NOERR, 1, 1, 0, 0);
+		self.set_response_header(RCODE_NOERROR, 1, 1, 0, 0);
 		// to do: check available buffer, shouldn't be a problem though
-		// compression! qname is conveniently always just after the header
+		// rfc1034 4.1.4 message compression
+		// qname is conveniently always just after the header
 		let name: u16 = 0b1100_0000_0000_0000 | DNS_HEADER_LEN as u16;
 		self.msg[offset..offset + 2].copy_from_slice(&name.to_be_bytes());
 		self.msg[offset + 2..offset + 4].copy_from_slice(&TYPE_A.to_be_bytes());
@@ -135,20 +110,34 @@ impl<'a> Msg<'a> {
 		self.msg[10..12].copy_from_slice(&ar.to_be_bytes());
 	}
 
-	fn qr(&self) -> bool {
-		get_bit(self.msg[2], FLAG_O_QR)
+	fn id(&self) -> u16 {
+		u16be(&self.msg[0..2])
 	}
-	fn aa(&self) -> bool {
-		get_bit(self.msg[2], FLAG_O_AA)
+	fn qd_count(&self) -> u16 {
+		u16be(&self.msg[4..6])
 	}
+	fn an_count(&self) -> u16 {
+		u16be(&self.msg[6..8])
+	}
+	fn ns_count(&self) -> u16 {
+		u16be(&self.msg[8..10])
+	}
+	fn ar_count(&self) -> u16 {
+		u16be(&self.msg[10..12])
+	}
+
+	fn get_flag(&self, o_byte: u8, o_bit: u8) -> bool {
+		get_bit(self.msg[o_byte as usize], o_bit)
+	}
+
 	fn tc(&self) -> bool {
-		get_bit(self.msg[2], FLAG_O_TC)
+		self.get_flag(2, 1)
 	}
 	fn rd(&self) -> bool {
-		get_bit(self.msg[2], FLAG_O_RD)
+		self.get_flag(2, 0)
 	}
-	fn ra(&self) -> bool {
-		get_bit(self.msg[2], FLAG_O_RA)
+	fn z(&self) -> bool {
+		self.get_flag(3, 6)
 	}
 
 	fn opcode(&self) -> u8 {
@@ -159,10 +148,10 @@ impl<'a> Msg<'a> {
 	}
 
 	fn set_response(&mut self) {
-		set_bit(&mut self.msg[2], FLAG_O_QR)
+		set_bit(&mut self.msg[2], 7)
 	}
 	fn set_ra(&mut self) {
-		set_bit(&mut self.msg[3], FLAG_O_RA)
+		set_bit(&mut self.msg[3], 7)
 	}
 	fn set_rcode(&mut self, c: u8) {
 		set_bits(&mut self.msg[3], 0, 4, c);
@@ -188,6 +177,9 @@ impl<'a> TryFrom<(&'a mut [u8], usize)> for Msg<'a> {
 		if msg.tc() {
 			return Err(ParseError::Truncated);
 		}
+		if msg.z() {
+			eprintln!("header: reserved bit is not zero");
+		}
 		Ok(msg)
 	}
 }
@@ -203,20 +195,10 @@ impl<'a> Display for Msg<'a> {
 			self.id()
 		)?;
 		write!(f, ";; flags:")?;
-		if self.qr() {
-			write!(f, " qr")?;
-		}
-		if self.aa() {
-			write!(f, " aa")?;
-		}
-		if self.tc() {
-			write!(f, " tc")?;
-		}
-		if self.rd() {
-			write!(f, " rd")?;
-		}
-		if self.ra() {
-			write!(f, " ra")?;
+		for &(o0, o1, name) in FLAGS {
+			if self.get_flag(o0, o1) {
+				write!(f, " {name}")?;
+			}
 		}
 		writeln!(
 			f,
@@ -233,6 +215,7 @@ fn u16be(bytes: &[u8]) -> u16 {
 	u16::from_be_bytes(bytes.try_into().unwrap())
 }
 
+// I really liked bitfields in C
 fn get_bit(b: u8, o: u8) -> bool {
 	(b >> o) & 1 == 1
 }
