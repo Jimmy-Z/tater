@@ -6,7 +6,9 @@ mod constants;
 
 use constants::*;
 
-type Resolver = fn(&[&[u8]]) -> Option<(Ipv4Addr, u32)>;
+pub trait Resolver {
+	fn resolve(self, name: &[&[u8]]) -> Option<(Ipv4Addr, u32)>;
+}
 
 // barebones dns library for fakedns
 // it does 2 things only:
@@ -20,7 +22,7 @@ pub struct Msg<'a> {
 
 impl<'a> Msg<'a> {
 	// write response in-place
-	pub fn response_with(&mut self, resolver: Resolver) -> usize {
+	pub fn response_with(&mut self, resolver: impl Resolver) -> usize {
 		// check headers
 		if self.opcode() != OPCODE_QUERY {
 			self.set_response();
@@ -58,7 +60,7 @@ impl<'a> Msg<'a> {
 		let qtype = u16be(&self.msg[offset..offset + 2]);
 		let qclass = u16be(&self.msg[offset + 2..offset + 4]);
 		offset += 4;
-		println!(
+		trace!(
 			"{} {} {}",
 			name.iter()
 				.map(|b| str::from_utf8(b).unwrap())
@@ -72,7 +74,7 @@ impl<'a> Msg<'a> {
 			self.set_rcode(RCODE_NOTIMP);
 			return self.len;
 		}
-		let Some((addr, ttl)) = resolver(&name) else {
+		let Some((addr, ttl)) = resolver.resolve(&name) else {
 			// rfc says we shouldn't set Name Error since we're not authoritative
 			self.set_response();
 			if self.rd() {

@@ -2,7 +2,7 @@ pub const DNS_HEADER_LEN: usize = 12;
 
 // byte offset, bit offset, name, for easier enumeration/display only
 // caution: in rfc1035 4.1.1 (and rfc6895 2), 0 actually denotes the highest bit
-// ad and cd are introduced in rfc2535 6.7
+// ad and cd were introduced in rfc2535 6.7
 pub const FLAGS: &[(u8, u8, &str)] = &[
 	(2, 7, "qr"), // query or response
 	// 4 bits gap here is opcode

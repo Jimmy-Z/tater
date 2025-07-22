@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, UdpSocket};
 
-use dns::Msg;
+use dns::{Msg, Resolver};
 
 fn main() -> std::io::Result<()> {
 	let d = UdpSocket::bind("127.0.0.1:1053")?;
@@ -11,7 +11,7 @@ fn main() -> std::io::Result<()> {
 		println!("{len} bytes from {addr}");
 		if let Ok(mut msg) = Msg::try_from((&mut buf[..], len)) {
 			println!("{msg}");
-			let len = msg.response_with(|_| Some((Ipv4Addr::new(127, 25, 0, 1), 42)));
+			let len = msg.response_with(Dummy());
 			if len > 0 {
 				println!("{len} bytes to {addr}");
 				let msg = Msg::try_from((&mut buf[..], len)).unwrap();
@@ -19,5 +19,13 @@ fn main() -> std::io::Result<()> {
 				d.send_to(&buf[..len], addr)?;
 			}
 		}
+	}
+}
+
+struct Dummy();
+
+impl Resolver for Dummy {
+	fn resolve(self, _name: &[&[u8]]) -> Option<(Ipv4Addr, u32)> {
+		Some((Ipv4Addr::new(127, 25, 0, 1), 42))
 	}
 }

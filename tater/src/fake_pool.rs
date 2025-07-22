@@ -35,11 +35,11 @@ impl FakePool {
 
 	pub fn get(&mut self, name: &str) -> Ipv4Addr {
 		let n = match self.entries.get(name) {
-			// be aware, last_access is not updated here
+			// note: last_access is not updated here
 			Some(v) => *v,
 			_ => {
 				let n = self.current;
-				loop  {
+				loop {
 					self.current = (self.current + 1) & self.mask;
 					// no infinite loop, but it may overwrite existing entry
 					// but unlikely since the pool should be large enough

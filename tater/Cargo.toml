@@ -19,4 +19,4 @@ tokio = { version = "1", features = [
 ] }
 socket2 = { version = "*", features = ["all"] }
 
-hickory-proto = { version = "*", default-features = false }
+dns = { path = "../dns" }

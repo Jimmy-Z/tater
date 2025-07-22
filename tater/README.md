@@ -26,7 +26,6 @@ Tater provides an lighter alternative to
 		```
 	* note: this handles both local and forwarded traffic.
 
-
 ## limitations
 * Linux only.
 * UDP is not supported, I don't really have a motivation.
@@ -34,7 +33,3 @@ Tater provides an lighter alternative to
 ## notes
 * `100.64.0.0/10` is [Carrier-grade NAT address](https://en.wikipedia.org/wiki/Carrier-grade_NAT),
 normally not routable on the Internet.
-
-## to do
-* remove dep hickory
-* use `../socks5`
