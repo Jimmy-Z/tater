@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64]
-        package: [mint]
+        package: [mint, tater]
     env:
       target: ${{ matrix.arch }}-unknown-linux-gnu
     steps:

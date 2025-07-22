@@ -8,8 +8,9 @@ Tater provides an lighter alternative to
 	* reverse lookup the domain name then pass that to SOCKS5.
 
 ## usage
-* `cargo run`
-	* `cargo run -- --help`
+* `sudo setcap cap_net_admin=ep tater`
+* `./tater`
+	* `./tater --help`
 * prepare a SOCKS5 proxy, for example, mint.
 * configure dnsmasq or AdGuardHome to forward certain DNS requests to fake DNS.
 * configure routing and nftables to route `100.64.0.0/10` to transparent proxy.
