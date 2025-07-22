@@ -20,7 +20,7 @@ pub async fn fake_dns(
 			r = s.recv_from(&mut buf) => {
 				match r {
 					Ok((len, addr)) => {
-						trace!("udp recv {} bytes from {}", len, addr);
+						trace!("udp recv {len} bytes from {addr}");
 						let Ok(mut msg) = Msg::try_from((&mut buf[..], len)) else {
 							continue;
 						};
@@ -38,16 +38,16 @@ pub async fn fake_dns(
 						}
 						match s.send_to(&buf[..len], addr).await {
 							Ok(len) => {
-								trace!("udp send {} bytes to {}", len, addr);
+								trace!("udp send {len} bytes to {addr}");
 							}
 							Err(e) => {
-								error!("udp send error: {}", e);
+								error!("udp send error: {e}");
 								break;
 							}
 						}
 					}
 					Err(e) => {
-						error!("udp recv error: {}", e);
+						error!("udp recv error: {e}");
 						break;
 					}
 				}

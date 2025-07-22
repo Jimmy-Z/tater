@@ -48,7 +48,7 @@ pub async fn tproxy(
 				match r {
 					Ok((stream, addr)) => {
 						let dest_addr = stream.local_addr().unwrap();
-						info!("tcp {} -> {}", addr, dest_addr);
+						info!("tcp {addr} -> {dest_addr}");
 						let dest_ip4 = match dest_addr.ip() {
 							IpAddr::V4(v) => v,
 							_ => {
@@ -59,7 +59,7 @@ pub async fn tproxy(
 						let name = match pool.borrow_mut().get_reverse(dest_ip4) {
 							Some(v) => v,
 							_ => {
-								error!("\tfake pool doesn't have the entry {}", dest_ip4);
+								error!("\tfake pool doesn't have the entry {dest_ip4}");
 								continue;
 							}
 						};
@@ -67,7 +67,7 @@ pub async fn tproxy(
 						task::spawn_local(proxy(stream, name, dest_addr.port(), socks_addr));
 					}
 					Err(e) => {
-						error!("tcp accept error: {}", e);
+						error!("tcp accept error: {e}");
 						break;
 					}
 				}

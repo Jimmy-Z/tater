@@ -61,7 +61,7 @@ impl FakePool {
 			}
 		};
 		let a = u32_to_ip4(self.base + n);
-		info!("{} -> {}", name, a);
+		info!("{name} -> {a}");
 		a
 	}
 
@@ -86,7 +86,7 @@ impl FakePool {
 			}
 		});
 		if removed > 0 {
-			info!("gc: total {}, removed {}", total, removed);
+			info!("gc: total {total}, removed {removed}");
 		}
 	}
 }
