@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["dns", "mint", "socks5"]
+members = ["dns", "mint", "socks5", "tater"]
 
 [profile.release]
 lto = true

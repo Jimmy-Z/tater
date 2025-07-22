@@ -61,7 +61,7 @@ jobs:
       - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - run: rustup target add ${{ env.target }}
       - run: cargo install cargo-ndk
-      - run: cargo ndk -t ${{ env.target }} build --release - p ${{ env.package }}
+      - run: cargo ndk -t ${{ env.target }} build --release -p ${{ env.package }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.package }}-android-aarch64-${{ env.GIT_REV_SHORT }}
