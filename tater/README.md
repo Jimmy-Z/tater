@@ -1,4 +1,4 @@
-Tater provides an lighter alternative to
+Tater provides a lighter alternative to
 [potato routing](https://github.com/Jimmy-Z/potato-routing/).
 
 ## two services

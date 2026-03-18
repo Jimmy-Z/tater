@@ -7,7 +7,7 @@ mod constants;
 use constants::*;
 
 pub trait Resolver {
-	fn resolve(self, name: &[&[u8]]) -> Option<(Ipv4Addr, u32)>;
+	fn resolve(self, name: String) -> Option<(Ipv4Addr, u32)>;
 }
 
 // barebones dns library for fakedns
@@ -35,7 +35,7 @@ impl<'a> Msg<'a> {
 			return self.len;
 		}
 
-		let mut name = Vec::with_capacity(8);
+		let mut name = Vec::with_capacity(0x100);
 		let mut offset = DNS_HEADER_LEN;
 		// parse name
 		loop {
@@ -50,9 +50,16 @@ impl<'a> Msg<'a> {
 			if offset + 1 + label_len > self.len {
 				return 0;
 			}
-			name.push(&self.msg[offset + 1..offset + 1 + label_len]);
+			name.extend_from_slice(&self.msg[offset + 1..offset + 1 + label_len]);
+			name.push(b'.');
 			offset += 1 + label_len;
 		}
+		// rust don't have a from_ascii
+		let Ok(name) = String::from_utf8(name).inspect_err(|e| error!("invalid name: {e}")) else {
+			self.set_response();
+			self.set_rcode(RCODE_FORMERR);
+			return self.len;
+		};
 		// QTYPE QCLASS
 		if offset + 4 > self.len {
 			return 0;
@@ -60,21 +67,13 @@ impl<'a> Msg<'a> {
 		let qtype = u16be(&self.msg[offset..offset + 2]);
 		let qclass = u16be(&self.msg[offset + 2..offset + 4]);
 		offset += 4;
-		trace!(
-			"{} {} {}",
-			name.iter()
-				.map(|b| str::from_utf8(b).unwrap())
-				.collect::<Vec<_>>()
-				.join("."),
-			type2str(qtype),
-			class2str(qclass)
-		);
+		trace!("{} {} {}", &name, type2str(qtype), class2str(qclass));
 		if qtype != TYPE_A || qclass != CLASS_IN {
 			self.set_response();
 			self.set_rcode(RCODE_NOTIMP);
 			return self.len;
 		}
-		let Some((addr, ttl)) = resolver.resolve(&name) else {
+		let Some((addr, ttl)) = resolver.resolve(name) else {
 			// rfc says we shouldn't set Name Error since we're not authoritative
 			self.set_response();
 			if self.rd() {

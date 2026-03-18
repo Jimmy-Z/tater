@@ -1,13 +1,13 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
+use clap::Parser;
 use log::*;
 use tokio::{signal::ctrl_c, sync::oneshot, task};
-use clap::Parser;
 
 use tater::{
-	fake_dns::fake_dns,
-	fake_pool::{gc_task, FakePool},
-	tproxy::tproxy,
+	fake_dns,
+	fake_pool::{FakePool, gc_task},
+	tproxy,
 };
 
 #[derive(Parser)]
@@ -32,7 +32,6 @@ pub struct Args {
 
 	#[clap(short, long, default_value = "127.0.0.1:1080")]
 	pub socks5: String,
-
 }
 
 #[tokio::main(flavor = "current_thread")]

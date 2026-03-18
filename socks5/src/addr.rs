@@ -225,7 +225,7 @@ pub async fn write_domain<T: AsyncWrite + Unpin>(w: &mut T, d: &str) -> Option<(
 
 #[cfg(test)]
 mod tests {
-	use rand::{Rng, distr::Alphanumeric, rng, rngs::ThreadRng};
+	use rand::{RngExt as _, distr::Alphanumeric, rng, rngs::ThreadRng};
 
 	use super::*;
 

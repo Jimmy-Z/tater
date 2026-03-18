@@ -1,7 +1,6 @@
 use aead::{AeadCore, AeadInPlace, KeyInit, Nonce, OsRng as AeadOsRng};
 use bytes::{BufMut, BytesMut};
 use log::*;
-use rand::{Rng as _, TryRngCore as _, rngs::OsRng};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, copy, split};
 
 const EOH: &[u8] = b"\r\n\r\n";
@@ -89,8 +88,8 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 
 	// padding
 	buf.put_bytes(
-		OsRng.unwrap_err().random(),
-		OsRng.unwrap_err().random_range(0x200..0x300),
+		rand::random(),
+		rand::random_range(0x200..0x300),
 	);
 
 	let mut payload = buf.split_off(payload_offset);

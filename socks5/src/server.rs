@@ -82,11 +82,11 @@ pub async fn connect_handshake<'a, T: AsyncRead + AsyncWrite + Unpin>(
 	io: &mut T,
 ) -> Option<Dst<'a>> {
 	let mut buf = BytesMut::with_capacity(0x100);
-	// caution: naive assumption that the client request was sent in one go
+	// caution: assume that the request was received in one go
 	io.read_buf(&mut buf).await.ok()?;
 
 	if buf.len() < EOH.len() {
-		error!("request to short to even contain end of header");
+		error!("request too short to even contain end of header");
 		return None;
 	}
 

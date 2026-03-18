@@ -25,7 +25,7 @@ fn main() -> std::io::Result<()> {
 struct Dummy();
 
 impl Resolver for Dummy {
-	fn resolve(self, _name: &[&[u8]]) -> Option<(Ipv4Addr, u32)> {
+	fn resolve(self, _: String) -> Option<(Ipv4Addr, u32)> {
 		Some((Ipv4Addr::new(127, 25, 0, 1), 42))
 	}
 }

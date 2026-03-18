@@ -1,4 +1,4 @@
-// be aware TPROXY is not REDIRECT
+// note: TPROXY is not REDIRECT
 //	https://www.kernel.org/doc/Documentation/networking/tproxy.txt
 // short version:
 //	- REDIRECT use a regular listening socket
@@ -6,7 +6,6 @@
 //	- TPROXY needs a listening socket with setsockopt(IP_TRANSPARENT)
 //		no special handling is required to get dest addr
 //		also the binary requires CAP_NET_ADMIN
-//			`setcap cap_net_admin=ep target/debug/tater`
 
 use std::{
 	cell::RefCell,
@@ -17,7 +16,7 @@ use std::{
 use log::*;
 use socket2::Socket;
 use tokio::{
-	io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt},
+	io::{AsyncReadExt, AsyncWriteExt, Result, copy_bidirectional},
 	net::{TcpListener, TcpStream},
 	select,
 	sync::oneshot,
@@ -44,34 +43,7 @@ pub async fn tproxy(
 
 	loop {
 		select! {
-			r = s.accept() => {
-				match r {
-					Ok((stream, addr)) => {
-						let dest_addr = stream.local_addr().unwrap();
-						info!("tcp {addr} -> {dest_addr}");
-						let dest_ip4 = match dest_addr.ip() {
-							IpAddr::V4(v) => v,
-							_ => {
-								error!("\tonly supports IPv4");
-								continue;
-							}
-						};
-						let name = match pool.borrow_mut().get_reverse(dest_ip4) {
-							Some(v) => v,
-							_ => {
-								error!("\tfake pool doesn't have the entry {dest_ip4}");
-								continue;
-							}
-						};
-						info!("\t{}", &name);
-						task::spawn_local(proxy(stream, name, dest_addr.port(), socks_addr));
-					}
-					Err(e) => {
-						error!("tcp accept error: {e}");
-						break;
-					}
-				}
-			}
+			r = s.accept() =>  handle_conn(r, &pool, socks_addr),
 			_ = &mut quit_signal => {
 				info!("exiting");
 				break;
@@ -80,6 +52,28 @@ pub async fn tproxy(
 	}
 
 	Some(())
+}
+
+fn handle_conn(
+	r: Result<(TcpStream, SocketAddr)>,
+	pool: &Rc<RefCell<FakePool>>,
+	socks_addr: SocketAddr,
+) {
+	let Ok((stream, addr)) = r.inspect_err(|e| error!("tcp accept error: {e}")) else {
+		return;
+	};
+	let dst = stream.local_addr().unwrap();
+	info!("tcp {addr} -> {dst}");
+	let IpAddr::V4(dst_ip) = dst.ip() else {
+		error!("\tonly supports IPv4");
+		return;
+	};
+	let Some(name) = pool.borrow_mut().get_reverse(dst_ip) else {
+		error!("\tfake pool doesn't have the entry {dst_ip}");
+		return;
+	};
+	info!("\t{}", &name);
+	task::spawn_local(proxy(stream, name, dst.port(), socks_addr));
 }
 
 const SOCKS5_VERSION: u8 = 0x05;
@@ -104,8 +98,10 @@ async fn proxy(
 	dest_port: u16,
 	socks_addr: SocketAddr,
 ) -> Option<()> {
+	let _ = stream.set_nodelay(true);
+
 	let mut socks = TcpStream::connect(socks_addr).await.unwrap();
-	socks.set_nodelay(true).unwrap();
+	let _ = socks.set_nodelay(true);
 
 	let mut buf = vec![0u8; 0x110];
 
