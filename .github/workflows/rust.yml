@@ -13,7 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: cargo test --verbose
   # instead of using a big matrix and conditional steps, this is clearer
   build-linux:
@@ -21,16 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [x86_64]
+        arch: [x86_64, aarch64]
         package: [mint, tater]
     env:
       target: ${{ matrix.arch }}-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup target add ${{ env.target }}
       - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - run: cargo build --release --target ${{ env.target }} -p ${{ matrix.package }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package }}-linux-${{ matrix.arch }}-${{ env.GIT_REV_SHORT }}
           path: target/${{ env.target }}/release/${{ matrix.package }}
@@ -41,12 +41,12 @@ jobs:
       target: x86_64-pc-windows-msvc
       package: mint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup target add ${{ env.target }}
       # note: this step is a little different on windows
       - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
       - run: cargo build --release --target ${{ env.target }} -p ${{ env.package }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.package }}-windows-x86_64-${{ env.GIT_REV_SHORT }}
           path: target/${{ env.target }}/release/${{ env.package }}.exe
@@ -57,12 +57,12 @@ jobs:
       target: aarch64-linux-android
       package: mint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup target add ${{ env.target }}
       - run: cargo install cargo-ndk
       - run: echo "GIT_REV_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - run: cargo ndk -t ${{ env.target }} build --release -p ${{ env.package }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.package }}-android-aarch64-${{ env.GIT_REV_SHORT }}
           path: target/${{ env.target }}/release/${{ env.package }}
