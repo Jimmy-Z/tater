@@ -18,13 +18,17 @@ jobs:
   # instead of using a big matrix and conditional steps, this is clearer
   build-linux:
     needs: [test]
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
+        arch:
+          - name: x86_64
+            runner: ubuntu-latest
+          - name: aarch64
+            runner: ubuntu-24.04-arm
         package: [mint, tater]
+    runs-on: ${{ matrix.arch.runner }}
     env:
-      target: ${{ matrix.arch }}-unknown-linux-gnu
+      target: ${{ matrix.arch.name }}-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v6
       - run: rustup target add ${{ env.target }}
@@ -32,7 +36,7 @@ jobs:
       - run: cargo build --release --target ${{ env.target }} -p ${{ matrix.package }}
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-linux-${{ matrix.arch }}-${{ env.GIT_REV_SHORT }}
+          name: ${{ matrix.package }}-linux-${{ matrix.arch.name }}-${{ env.GIT_REV_SHORT }}
           path: target/${{ env.target }}/release/${{ matrix.package }}
   build-windows:
     needs: [test]
