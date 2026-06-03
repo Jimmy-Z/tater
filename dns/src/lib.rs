@@ -7,7 +7,7 @@ mod constants;
 use constants::*;
 
 pub trait Resolver {
-	fn resolve(self, name: String) -> Option<(Ipv4Addr, u32)>;
+	fn resolve(self, name: &str) -> Option<(Ipv4Addr, u32)>;
 }
 
 // barebones dns library for fakedns
@@ -35,6 +35,7 @@ impl<'a> Msg<'a> {
 			return self.len;
 		}
 
+		// fqdn max len 255
 		let mut name = Vec::with_capacity(0x100);
 		let mut offset = DNS_HEADER_LEN;
 		// parse name
@@ -54,6 +55,11 @@ impl<'a> Msg<'a> {
 			name.push(b'.');
 			offset += 1 + label_len;
 		}
+		if name.len() <= 1 {
+			return 0;
+		}
+		// remove trailing dot
+		name.pop().unwrap();
 		// rust don't have a from_ascii
 		let Ok(name) = String::from_utf8(name).inspect_err(|e| error!("invalid name: {e}")) else {
 			self.set_response();
@@ -68,17 +74,18 @@ impl<'a> Msg<'a> {
 		let qclass = u16be(&self.msg[offset + 2..offset + 4]);
 		offset += 4;
 		trace!("{} {} {}", &name, type2str(qtype), class2str(qclass));
-		if qtype != TYPE_A || qclass != CLASS_IN {
+		if qclass != CLASS_IN || (qtype != TYPE_A && qtype != TYPE_AAAA){
 			self.set_response();
 			self.set_rcode(RCODE_NOTIMP);
 			return self.len;
 		}
-		let Some((addr, ttl)) = resolver.resolve(name) else {
+		if qtype == TYPE_AAAA {
+			self.set_response_ra();
+			return self.len;
+		}
+		let Some((addr, ttl)) = resolver.resolve(&name) else {
 			// rfc says we shouldn't set Name Error since we're not authoritative
-			self.set_response();
-			if self.rd() {
-				self.set_ra();
-			}
+			self.set_response_ra();
 			return self.len;
 		};
 		// start writting response
@@ -100,15 +107,19 @@ impl<'a> Msg<'a> {
 	}
 
 	fn set_response_header(&mut self, rcode: u8, qd: u16, an: u16, ns: u16, ar: u16) {
-		self.set_response();
-		if self.rd() {
-			self.set_ra();
-		}
+		self.set_response_ra();
 		self.set_rcode(rcode);
 		self.msg[4..6].copy_from_slice(&qd.to_be_bytes());
 		self.msg[6..8].copy_from_slice(&an.to_be_bytes());
 		self.msg[8..10].copy_from_slice(&ns.to_be_bytes());
 		self.msg[10..12].copy_from_slice(&ar.to_be_bytes());
+	}
+
+	fn set_response_ra(&mut self) {
+		self.set_response();
+		if self.rd() {
+			self.set_ra();
+		}
 	}
 
 	fn id(&self) -> u16 {

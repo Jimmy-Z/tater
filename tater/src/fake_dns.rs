@@ -63,7 +63,7 @@ async fn handle_req(
 }
 
 impl Resolver for &mut FakePool {
-	fn resolve(self, name: String) -> Option<(std::net::Ipv4Addr, u32)> {
-		Some((self.get(&name), 1))
+	fn resolve(self, name: &str) -> Option<(std::net::Ipv4Addr, u32)> {
+		Some((self.get(name), 1))
 	}
 }

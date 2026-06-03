@@ -3,6 +3,9 @@ use std::net::{Ipv4Addr, UdpSocket};
 use dns::{Msg, Resolver};
 
 fn main() -> std::io::Result<()> {
+
+	env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).init();
+
 	let d = UdpSocket::bind("127.0.0.1:1053")?;
 
 	let mut buf = [0; 0x200];
@@ -25,7 +28,8 @@ fn main() -> std::io::Result<()> {
 struct Dummy();
 
 impl Resolver for Dummy {
-	fn resolve(self, _: String) -> Option<(Ipv4Addr, u32)> {
+	fn resolve(self, n: &str) -> Option<(Ipv4Addr, u32)> {
+		println!("\"{n}\"");
 		Some((Ipv4Addr::new(127, 25, 0, 1), 42))
 	}
 }

@@ -34,7 +34,9 @@ const CLASS_TABLE: &[&str] = &["IN"];
 
 // Type
 pub const TYPE_A: u16 = 1;
-const TYPE_TABLE: &[&str] = &["A"];
+pub const TYPE_AAAA: u16 = 28; // rfc3596
+
+const NOTIMP: &str = "NotImplemented";
 
 pub fn opcode2str(c: u8) -> &'static str {
 	code2str(OPCODE_TABLE, OPCODE_QUERY as u16, c as u16)
@@ -49,7 +51,11 @@ pub fn class2str(c: u16) -> &'static str {
 }
 
 pub fn type2str(c: u16) -> &'static str {
-	code2str(TYPE_TABLE, TYPE_A, c)
+	match c {
+		TYPE_A => "A",
+		TYPE_AAAA => "AAAA",
+		_ => NOTIMP,
+	}
 }
 
 fn code2str(table: &'static [&'static str], base: u16, c: u16) -> &'static str {
@@ -57,6 +63,6 @@ fn code2str(table: &'static [&'static str], base: u16, c: u16) -> &'static str {
 	if c < table.len() {
 		table[c]
 	} else {
-		"NotImplemented"
+		NOTIMP
 	}
 }
