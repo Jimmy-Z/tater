@@ -1,13 +1,14 @@
 [package]
+edition = "2024"
 name = "tater"
 version = "0.1.0"
-edition = "2024"
 
 [dependencies]
-log = { version = "*", features = ["release_max_level_debug"] }
+clap = { version = "*", features = ["derive", "env"] }
 env_logger = "*"
-clap = { version = "*", features = ["derive"] }
+log = { version = "*", features = ["release_max_level_debug"] }
 
+socket2 = { version = "*", features = ["all"] }
 tokio = { version = "1", features = [
 	"net",
 	"rt",
@@ -17,6 +18,8 @@ tokio = { version = "1", features = [
 	"io-util",
 	"time",
 ] }
-socket2 = { version = "*", features = ["all"] }
 
 dns = { path = "../dns" }
+
+[build-dependencies]
+utils = { path = "../utils" }

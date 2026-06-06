@@ -1,0 +1,7 @@
+[package]
+edition = "2024"
+name = "utils"
+version = "0.1.0"
+
+[dependencies]
+time = {version = "*", features = ["local-offset", "formatting", "macros"]}

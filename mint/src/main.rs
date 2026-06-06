@@ -14,20 +14,9 @@ mod proto;
 use key::*;
 use proto::*;
 
-// I want to implement this as const fn () -> &'static str,
-// so that we won't need clap's string feature.
-// but concat! supports only literals, not consts.
-// there is const_format or build.rs, but I think they're overkill
-fn ver() -> String {
-	format!(
-		"v{} rev-{}",
-		env!("CARGO_PKG_VERSION"),
-		option_env!("GIT_REV_SHORT").unwrap_or("N/A"),
-	)
-}
 
 #[derive(Parser)]
-#[command(version = ver())]
+#[command(version = env!("REV"))]
 struct Args {
 	#[command(subcommand)]
 	cmd: Cmds,
@@ -38,29 +27,29 @@ enum Cmds {
 	#[command(alias = "s")]
 	Server {
 		/// PSK file path
-		#[arg(short = 'k', default_value = "conf/psk")]
+		#[arg(short = 'k', env, default_value = "conf/psk")]
 		psk: String,
 
-		#[arg(short, default_value = "127.0.0.1:8080")]
+		#[arg(short, env, default_value = "127.0.0.1:8080")]
 		listen: String,
 
-		#[arg(short, default_value = "conf/fake-resp.txt")]
+		#[arg(short, env, default_value = "conf/fake-resp.txt")]
 		fake_header: String,
 	},
 
 	#[command(alias = "c")]
 	Client {
 		/// PSK file path
-		#[arg(short = 'k', default_value = "conf/psk")]
+		#[arg(short = 'k', env, default_value = "conf/psk")]
 		psk: String,
 
-		#[arg(short, default_value = "127.0.0.1:1080")]
+		#[arg(short, env, default_value = "127.0.0.1:1080")]
 		listen: String,
 
-		#[arg(short, default_value = "127.0.0.1:8080")]
+		#[arg(short, env, default_value = "127.0.0.1:8080")]
 		server: String,
 
-		#[arg(short, default_value = "conf/fake-req.txt")]
+		#[arg(short, env, default_value = "conf/fake-req.txt")]
 		fake_header: String,
 	},
 
