@@ -1,5 +1,7 @@
-use aead::{AeadCore, AeadInPlace, KeyInit, Nonce, OsRng as AeadOsRng};
-use bytes::{BufMut, BytesMut};
+use aead::{
+	AeadCore, AeadInPlace, KeyInit, Nonce, OsRng,
+	bytes::{BufMut, BytesMut},
+};
 use log::*;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, copy, split};
 
@@ -79,7 +81,7 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 ) {
 	buf.put_slice(header);
 
-	let nonce = C::generate_nonce(&mut AeadOsRng);
+	let nonce = C::generate_nonce(&mut OsRng);
 	buf.put_slice(&nonce);
 
 	let payload_offset = buf.len();
@@ -87,10 +89,7 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 	payload.write(&mut *buf);
 
 	// padding
-	buf.put_bytes(
-		rand::random(),
-		rand::random_range(0x200..0x300),
-	);
+	buf.put_bytes(rand::random(), rand::random_range(0x200..0x300));
 
 	let mut payload = buf.split_off(payload_offset);
 
@@ -223,7 +222,7 @@ async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + U
 		return None;
 	}
 
-	let nonce = C::generate_nonce(&mut AeadOsRng);
+	let nonce = C::generate_nonce(&mut OsRng);
 	if let Err(e) = cipher.encrypt_in_place(&nonce, b"", &mut payload) {
 		error!("failed to encrypt: {e}");
 		return None;
@@ -347,8 +346,8 @@ fn obfuscate(a: u16, b: &[u8]) -> u16 {
 
 #[cfg(test)]
 mod test {
-	use bytes::BytesMut;
-	use chacha20poly1305::{AeadCore, ChaCha20Poly1305, KeyInit, aead::OsRng};
+	use aead::{bytes::BytesMut, AeadCore, KeyInit, OsRng};
+	use chacha20poly1305::ChaCha20Poly1305;
 
 	use super::*;
 
