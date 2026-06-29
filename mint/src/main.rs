@@ -131,12 +131,13 @@ async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &st
 		let dns = dns.clone();
 		let fake_header = fake_header.clone();
 		tokio::task::spawn_local(async move {
-			let mut buf = BytesMut::with_capacity(0x500);
+			let mut buf = BytesMut::with_capacity(0x600);
 			let Some((host, port)) =
 				server_handshake(&mut s, &cipher, &mut buf, &fake_header).await
 			else {
 				return;
 			};
+			drop(buf);
 			info!("{r_addr} -> {host}:{port}");
 			let Some(mut u) = connect(bind, dns, &host, port).await else {
 				return;
@@ -159,14 +160,16 @@ async fn connect(
 	let addrs: Vec<IpAddr> = match (dns, bind) {
 		(None, None) => lookup_host(host)
 			.await
-			.inspect_err(|e| {})
+			.inspect_err(|e| {
+				error!("failed to resolve \"{host}\": {e}");
+			})
 			.ok()?
 			.map(|s| s.ip())
 			.collect(),
 		(None, Some(IpAddr::V4(_))) => lookup_host(host)
 			.await
 			.inspect_err(|e| {
-				// to do
+				error!("failed to resolve \"{host}\": {e}");
 			})
 			.ok()?
 			.filter_map(|s| if s.is_ipv4() { Some(s.ip()) } else { None })
@@ -174,63 +177,64 @@ async fn connect(
 		(None, Some(IpAddr::V6(_))) => lookup_host(host)
 			.await
 			.inspect_err(|e| {
-				// to do
+				error!("failed to resolve \"{host}\": {e}");
 			})
 			.ok()?
 			.filter_map(|s| if s.is_ipv6() { Some(s.ip()) } else { None })
 			.collect(),
-		(Some(dns), None) => {
-			dns.lookup_ip(host)
-				.await
-				.inspect_err(|e| {
-					// to do
-				})
-				.ok()?
-				.iter()
-				.collect()
-		}
-		(Some(dns), Some(IpAddr::V4(_))) => {
-			dns.ipv4_lookup(host)
-				.await
-				.inspect_err(|e| {
-					// to do
-				})
-				.ok()?
-				.answers()
-				.iter()
-				.filter_map(|r| match r.data {
-					resolver::proto::rr::RData::A(a) => Some(IpAddr::V4(a.0)),
-					_ => None,
-				})
-				.collect()
-		}
-		(Some(dns), Some(IpAddr::V6(_))) => {
-			dns.ipv6_lookup(host)
-				.await
-				.inspect_err(|e| {
-					// to do
-				})
-				.ok()?
-				.answers()
-				.iter()
-				.filter_map(|r| match r.data {
-					resolver::proto::rr::RData::AAAA(a) => Some(IpAddr::V6(a.0)),
-					_ => None,
-				})
-				.collect()
-		}
+		(Some(dns), None) => dns
+			.lookup_ip(host)
+			.await
+			.inspect_err(|e| {
+				error!("failed to resolve \"{host}\": {e}");
+			})
+			.ok()?
+			.iter()
+			.collect(),
+		(Some(dns), Some(IpAddr::V4(_))) => dns
+			.ipv4_lookup(host)
+			.await
+			.inspect_err(|e| {
+				error!("failed to resolve \"{host}\": {e}");
+			})
+			.ok()?
+			.answers()
+			.iter()
+			.filter_map(|r| match r.data {
+				resolver::proto::rr::RData::A(a) => Some(IpAddr::V4(a.0)),
+				_ => None,
+			})
+			.collect(),
+		(Some(dns), Some(IpAddr::V6(_))) => dns
+			.ipv6_lookup(host)
+			.await
+			.inspect_err(|e| {
+				error!("failed to resolve \"{host}\": {e}");
+			})
+			.ok()?
+			.answers()
+			.iter()
+			.filter_map(|r| match r.data {
+				resolver::proto::rr::RData::AAAA(a) => Some(IpAddr::V6(a.0)),
+				_ => None,
+			})
+			.collect(),
 	};
-	let addrs: Vec<SocketAddr> = addrs.into_iter().map(|a|SocketAddr::new(a, port)).collect();
 	if addrs.is_empty() {
-		// to do error!("");
-		return None
+		error!("failed to resolve \"{host}\", no addresses");
+		return None;
 	}
+	let addrs: Vec<SocketAddr> = addrs
+		.into_iter()
+		.map(|a| SocketAddr::new(a, port))
+		.collect();
 	match bind {
-		None => {
-			TcpStream::connect(addrs.as_slice()).await.inspect_err(|e| {
-				// to do
-			}).ok()
-		},
+		None => TcpStream::connect(addrs.as_slice())
+			.await
+			.inspect_err(|e| {
+				error!("failed to connect to \"{host}\"{addrs:?}: {e}");
+			})
+			.ok(),
 		Some(bind) => {
 			for a in addrs {
 				let s = match bind {
@@ -238,19 +242,19 @@ async fn connect(
 					IpAddr::V6(_) => TcpSocket::new_v6(),
 				}
 				.inspect_err(|e| {
-					error!("failed to create socket, {e}");
+					error!("failed to create socket: {e}");
 				})
 				.ok()?;
 				// reuse addr?
 				s.bind(SocketAddr::new(bind, 0))
-				.inspect_err(|e| {
-					error!("failed to bind to {bind}:0, {e}");
-				})
-				.ok()?;
-				if let Ok(s) =  s.connect(a).await.inspect_err(|e|{
-					// to do
+					.inspect_err(|e| {
+						error!("failed to bind to {bind}: {e}");
+					})
+					.ok()?;
+				if let Ok(s) = s.connect(a).await.inspect_err(|e| {
+					error!("failed to connect to \"{host}\"({a}): {e}");
 				}) {
-					return Some(s)
+					return Some(s);
 				}
 			}
 			None
@@ -327,7 +331,7 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 		let cipher = cipher.clone();
 		let upstream = upstream.clone();
 		tokio::task::spawn_local(async move {
-			let mut buf = BytesMut::with_capacity(0x500);
+			let mut buf = BytesMut::with_capacity(0x600);
 			let Some(dst) = socks5::server_handshake(&mut s).await else {
 				return;
 			};
@@ -351,6 +355,7 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 			else {
 				return;
 			};
+			drop(buf);
 			duplex(&cipher, &mut s, &mut u).await;
 			debug!("connection ended: {r_addr} -> {dst}");
 		});

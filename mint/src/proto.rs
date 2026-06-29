@@ -89,6 +89,7 @@ fn write_msg<'a, C: AeadCore + AeadInOut>(
 	payload.write(&mut *buf);
 
 	// padding
+	// to do: reduce dep
 	buf.put_bytes(rand::random(), rand::random_range(0x100..0x300));
 
 	let mut payload = buf.split_off(payload_offset);
