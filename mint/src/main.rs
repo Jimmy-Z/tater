@@ -157,30 +157,29 @@ async fn connect(
 	host: &str,
 	port: u16,
 ) -> Option<TcpStream> {
-	let addrs: Vec<IpAddr> = match (dns, bind) {
-		(None, None) => lookup_host(host)
+	let addrs: Vec<SocketAddr> = match (dns, bind) {
+		(None, None) => lookup_host(format!("{host}:{port}"))
 			.await
 			.inspect_err(|e| {
 				error!("failed to resolve \"{host}\": {e}");
 			})
 			.ok()?
-			.map(|s| s.ip())
 			.collect(),
-		(None, Some(IpAddr::V4(_))) => lookup_host(host)
+		(None, Some(IpAddr::V4(_))) => lookup_host(format!("{host}:{port}"))
 			.await
 			.inspect_err(|e| {
 				error!("failed to resolve \"{host}\": {e}");
 			})
 			.ok()?
-			.filter_map(|s| if s.is_ipv4() { Some(s.ip()) } else { None })
+			.filter(SocketAddr::is_ipv4)
 			.collect(),
-		(None, Some(IpAddr::V6(_))) => lookup_host(host)
+		(None, Some(IpAddr::V6(_))) => lookup_host(format!("{host}:{port}"))
 			.await
 			.inspect_err(|e| {
 				error!("failed to resolve \"{host}\": {e}");
 			})
 			.ok()?
-			.filter_map(|s| if s.is_ipv6() { Some(s.ip()) } else { None })
+			.filter(SocketAddr::is_ipv4)
 			.collect(),
 		(Some(dns), None) => dns
 			.lookup_ip(host)
@@ -190,6 +189,7 @@ async fn connect(
 			})
 			.ok()?
 			.iter()
+			.map(|i| SocketAddr::new(i, port))
 			.collect(),
 		(Some(dns), Some(IpAddr::V4(_))) => dns
 			.ipv4_lookup(host)
@@ -201,7 +201,7 @@ async fn connect(
 			.answers()
 			.iter()
 			.filter_map(|r| match r.data {
-				resolver::proto::rr::RData::A(a) => Some(IpAddr::V4(a.0)),
+				resolver::proto::rr::RData::A(a) => Some(SocketAddr::new(IpAddr::V4(a.0), port)),
 				_ => None,
 			})
 			.collect(),
@@ -215,7 +215,7 @@ async fn connect(
 			.answers()
 			.iter()
 			.filter_map(|r| match r.data {
-				resolver::proto::rr::RData::AAAA(a) => Some(IpAddr::V6(a.0)),
+				resolver::proto::rr::RData::AAAA(a) => Some(SocketAddr::new(IpAddr::V6(a.0), port)),
 				_ => None,
 			})
 			.collect(),
@@ -223,11 +223,9 @@ async fn connect(
 	if addrs.is_empty() {
 		error!("failed to resolve \"{host}\", no addresses");
 		return None;
+	} else {
+		debug!("resolved: {addrs:?}");
 	}
-	let addrs: Vec<SocketAddr> = addrs
-		.into_iter()
-		.map(|a| SocketAddr::new(a, port))
-		.collect();
 	match bind {
 		None => TcpStream::connect(addrs.as_slice())
 			.await
@@ -266,37 +264,38 @@ type Resolver = resolver::Resolver<resolver::net::runtime::TokioRuntimeProvider>
 
 fn parse_dns(dns: &str) -> Option<Resolver> {
 	if dns.is_empty() {
-		None
-	} else {
-		let nsc: Vec<_> = dns
-			.split(',')
-			.map(|s| {
-				let mut cc = resolver::config::ConnectionConfig::udp();
-				let addr = if let Ok(a) = SocketAddr::from_str(s) {
-					cc.port = a.port();
-					a.ip()
-				} else if let Ok(a) = IpAddr::from_str(s) {
-					a
-				} else {
-					panic!("invalid dns server: {s}");
-				};
-				resolver::config::NameServerConfig::new(addr, true, vec![cc])
-			})
-			.collect();
-		let rc = resolver::config::ResolverConfig::from_parts(None, vec![], nsc);
-		let mut b = resolver::Resolver::builder_with_config(
-			rc,
-			resolver::net::runtime::TokioRuntimeProvider::default(),
-		);
-		let ro = b.options_mut();
-		ro.use_hosts_file = resolver::config::ResolveHosts::Never;
-		ro.preserve_intermediates = false;
-		ro.try_tcp_on_error = true;
+		return None;
+	};
+	let nsc: Vec<_> = dns
+		.split(',')
+		.map(|s| {
+			let mut cc = resolver::config::ConnectionConfig::udp();
+			let addr = if let Ok(a) = SocketAddr::from_str(s) {
+				info!("dns server: {a}");
+				cc.port = a.port();
+				a.ip()
+			} else if let Ok(a) = IpAddr::from_str(s) {
+				info!("dns server: {a}");
+				a
+			} else {
+				panic!("invalid dns server: {s}");
+			};
+			resolver::config::NameServerConfig::new(addr, true, vec![cc])
+		})
+		.collect();
+	let rc = resolver::config::ResolverConfig::from_parts(None, vec![], nsc);
+	let mut b = resolver::Resolver::builder_with_config(
+		rc,
+		resolver::net::runtime::TokioRuntimeProvider::default(),
+	);
+	let ro = b.options_mut();
+	ro.use_hosts_file = resolver::config::ResolveHosts::Never;
+	ro.preserve_intermediates = false;
+	ro.try_tcp_on_error = true;
 
-		b.build()
-			.inspect_err(|e| error!("error initializing resolver: {e}"))
-			.ok()
-	}
+	b.build()
+		.inspect_err(|e| error!("error initializing resolver: {e}"))
+		.ok()
 }
 
 async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) -> Option<()> {
