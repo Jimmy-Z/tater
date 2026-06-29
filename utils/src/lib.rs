@@ -15,7 +15,7 @@ pub fn comp_time_env_rev() {
 	let rev = option_env!("GIT_REV_SHORT").unwrap_or("unknown");
 	let now = OffsetDateTime::now_local().unwrap();
 	println!(
-		"cargo::rustc-env=REV=rev: {}, built on: {}",
+		"cargo::rustc-env=REV=rev-{}, built on: {}",
 		rev,
 		now.format(&FMT).unwrap()
 	);

@@ -1,11 +1,16 @@
-use std::{net::SocketAddr, rc::Rc};
+use std::{
+	net::{IpAddr, SocketAddr},
+	rc::Rc,
+	str::FromStr,
+};
 
 use aead::bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use log::*;
 
 use chacha20poly1305::ChaCha20Poly1305 as Cipher;
-use tokio::net::{TcpListener, TcpStream, lookup_host};
+use hickory_resolver as resolver;
+use tokio::net::{TcpListener, TcpSocket, TcpStream, lookup_host};
 
 mod fake;
 mod key;
@@ -13,7 +18,6 @@ mod proto;
 
 use key::*;
 use proto::*;
-
 
 #[derive(Parser)]
 #[command(version = env!("REV"))]
@@ -32,6 +36,13 @@ enum Cmds {
 
 		#[arg(short, env, default_value = "127.0.0.1:8080")]
 		listen: String,
+
+		/// bind address for upstream connections
+		#[arg(short, env, default_value = "")]
+		bind: String,
+
+		#[arg(short, env, default_value = "")]
+		dns: String,
 
 		#[arg(short, env, default_value = "conf/fake-resp.txt")]
 		fake_header: String,
@@ -72,9 +83,11 @@ async fn main() {
 		Cmds::Server {
 			psk,
 			listen,
+			bind,
+			dns,
 			fake_header,
 		} => {
-			ls_run(server(psk, listen, fake_header)).await;
+			ls_run(server(psk, listen, bind, dns, fake_header)).await;
 		}
 		Cmds::Client {
 			psk,
@@ -96,9 +109,19 @@ async fn ls_run(f: impl Future) {
 	ls.run_until(f).await;
 }
 
-async fn server(key: &str, listen: &str, fake_header: &str) -> Option<()> {
+async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &str) -> Option<()> {
 	let fake_header = Rc::new(fake::get_fake_header(fake_header));
 	let cipher: Cipher = init_cipher(key)?;
+
+	let bind: Option<IpAddr> = if bind.is_empty() {
+		None
+	} else {
+		IpAddr::from_str(bind)
+			.inspect_err(|e| error!("error parsing bind address: {e}"))
+			.ok()
+	};
+
+	let dns = parse_dns(dns);
 
 	let l = TcpListener::bind(listen).await.unwrap();
 	info!("listening on {}", l.local_addr().unwrap());
@@ -106,28 +129,171 @@ async fn server(key: &str, listen: &str, fake_header: &str) -> Option<()> {
 	while let Ok((mut s, r_addr)) = l.accept().await {
 		let _ = s.set_nodelay(true);
 		let cipher = cipher.clone();
+		let dns = dns.clone();
 		let fake_header = fake_header.clone();
 		tokio::task::spawn_local(async move {
 			let mut buf = BytesMut::with_capacity(0x500);
-			let Some((addr, port)) =
+			let Some((host, port)) =
 				server_handshake(&mut s, &cipher, &mut buf, &fake_header).await
 			else {
 				return;
 			};
-			info!("{r_addr} -> {addr}:{port}");
-			let Ok(mut u) = TcpStream::connect(&format!("{addr}:{port}"))
-				.await
-				.map_err(|e| error!("error connecting to upstream: {e}"))
-			else {
+			info!("{r_addr} -> {host}:{port}");
+			let Some(mut u) = connect(bind, dns, &host, port).await else {
 				return;
 			};
 			let _ = u.set_nodelay(true);
 			duplex(&cipher, &mut u, &mut s).await;
-			debug!("connection ended: {r_addr} -> {addr}:{port}");
+			debug!("connection ended: {r_addr} -> {host}:{port}");
 		});
 	}
 
 	Some(())
+}
+
+async fn connect(
+	bind: Option<IpAddr>,
+	dns: Option<Resolver>,
+	host: &str,
+	port: u16,
+) -> Option<TcpStream> {
+	let addrs: Vec<IpAddr> = match (dns, bind) {
+		(None, None) => lookup_host(host)
+			.await
+			.inspect_err(|e| {})
+			.ok()?
+			.map(|s| s.ip())
+			.collect(),
+		(None, Some(IpAddr::V4(_))) => lookup_host(host)
+			.await
+			.inspect_err(|e| {
+				// to do
+			})
+			.ok()?
+			.filter_map(|s| if s.is_ipv4() { Some(s.ip()) } else { None })
+			.collect(),
+		(None, Some(IpAddr::V6(_))) => lookup_host(host)
+			.await
+			.inspect_err(|e| {
+				// to do
+			})
+			.ok()?
+			.filter_map(|s| if s.is_ipv6() { Some(s.ip()) } else { None })
+			.collect(),
+		(Some(dns), None) => {
+			dns.lookup_ip(host)
+				.await
+				.inspect_err(|e| {
+					// to do
+				})
+				.ok()?
+				.iter()
+				.collect()
+		}
+		(Some(dns), Some(IpAddr::V4(_))) => {
+			dns.ipv4_lookup(host)
+				.await
+				.inspect_err(|e| {
+					// to do
+				})
+				.ok()?
+				.answers()
+				.iter()
+				.filter_map(|r| match r.data {
+					resolver::proto::rr::RData::A(a) => Some(IpAddr::V4(a.0)),
+					_ => None,
+				})
+				.collect()
+		}
+		(Some(dns), Some(IpAddr::V6(_))) => {
+			dns.ipv6_lookup(host)
+				.await
+				.inspect_err(|e| {
+					// to do
+				})
+				.ok()?
+				.answers()
+				.iter()
+				.filter_map(|r| match r.data {
+					resolver::proto::rr::RData::AAAA(a) => Some(IpAddr::V6(a.0)),
+					_ => None,
+				})
+				.collect()
+		}
+	};
+	let addrs: Vec<SocketAddr> = addrs.into_iter().map(|a|SocketAddr::new(a, port)).collect();
+	if addrs.is_empty() {
+		// to do error!("");
+		return None
+	}
+	match bind {
+		None => {
+			TcpStream::connect(addrs.as_slice()).await.inspect_err(|e| {
+				// to do
+			}).ok()
+		},
+		Some(bind) => {
+			for a in addrs {
+				let s = match bind {
+					IpAddr::V4(_) => TcpSocket::new_v4(),
+					IpAddr::V6(_) => TcpSocket::new_v6(),
+				}
+				.inspect_err(|e| {
+					error!("failed to create socket, {e}");
+				})
+				.ok()?;
+				// reuse addr?
+				s.bind(SocketAddr::new(bind, 0))
+				.inspect_err(|e| {
+					error!("failed to bind to {bind}:0, {e}");
+				})
+				.ok()?;
+				if let Ok(s) =  s.connect(a).await.inspect_err(|e|{
+					// to do
+				}) {
+					return Some(s)
+				}
+			}
+			None
+		}
+	}
+}
+
+type Resolver = resolver::Resolver<resolver::net::runtime::TokioRuntimeProvider>;
+
+fn parse_dns(dns: &str) -> Option<Resolver> {
+	if dns.is_empty() {
+		None
+	} else {
+		let nsc: Vec<_> = dns
+			.split(',')
+			.map(|s| {
+				let mut cc = resolver::config::ConnectionConfig::udp();
+				let addr = if let Ok(a) = SocketAddr::from_str(s) {
+					cc.port = a.port();
+					a.ip()
+				} else if let Ok(a) = IpAddr::from_str(s) {
+					a
+				} else {
+					panic!("invalid dns server: {s}");
+				};
+				resolver::config::NameServerConfig::new(addr, true, vec![cc])
+			})
+			.collect();
+		let rc = resolver::config::ResolverConfig::from_parts(None, vec![], nsc);
+		let mut b = resolver::Resolver::builder_with_config(
+			rc,
+			resolver::net::runtime::TokioRuntimeProvider::default(),
+		);
+		let ro = b.options_mut();
+		ro.use_hosts_file = resolver::config::ResolveHosts::Never;
+		ro.preserve_intermediates = false;
+		ro.try_tcp_on_error = true;
+
+		b.build()
+			.inspect_err(|e| error!("error initializing resolver: {e}"))
+			.ok()
+	}
 }
 
 async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) -> Option<()> {
@@ -169,7 +335,7 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 			info!("{r_addr} -> {dst}");
 			let Ok(mut u) = TcpStream::connect(&upstream as &[SocketAddr])
 				.await
-				.map_err(|e| error!("error connecting to upstream: {e}"))
+				.inspect_err(|e| error!("error connecting to upstream: {e}"))
 			else {
 				return;
 			};
