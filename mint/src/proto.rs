@@ -25,13 +25,13 @@ pub async fn client_handshake<
 	write_msg(buf, cipher, header, &Req(host, port));
 	io.write_all(buf)
 		.await
-		.map_err(|e| debug!("handshake error writing: {e}"))
+		.inspect_err(|e| debug!("handshake error writing: {e}"))
 		.ok()?;
 
 	buf.clear();
 	io.read_buf(buf)
 		.await
-		.map_err(|e| debug!("handshake error reading: {e}"))
+		.inspect_err(|e| debug!("handshake error reading: {e}"))
 		.ok()?;
 	let resp: Resp = read_msg(buf, cipher)?;
 	if resp.0 != REP_OK {
@@ -54,7 +54,7 @@ pub async fn server_handshake<
 	buf.clear();
 	io.read_buf(buf)
 		.await
-		.map_err(|e| debug!("handshake error reading: {e}"))
+		.inspect_err(|e| debug!("handshake error reading: {e}"))
 		.ok()?;
 	let req: Req = read_msg(buf, cipher)?;
 
@@ -65,7 +65,7 @@ pub async fn server_handshake<
 	write_msg(buf, cipher, header, &Resp(REP_OK));
 	io.write_all(buf)
 		.await
-		.map_err(|e| debug!("handshake error writing: {e}"))
+		.inspect_err(|e| debug!("handshake error writing: {e}"))
 		.ok()?;
 
 	// debug!("buf capacity: {}", buf.capacity());
@@ -256,7 +256,7 @@ async fn dec1<C: AeadCore + AeadInOut, P: AsyncWrite + Unpin, E: AsyncRead + Unp
 	let len = encrypted
 		.read_u16()
 		.await
-		.map_err(|e| debug!("failed to read len: {e}"))
+		.inspect_err(|e| debug!("failed to read len: {e}"))
 		.ok()?;
 	let len = obfuscate(len, &nonce);
 	if len == 0 {
@@ -279,7 +279,7 @@ async fn dec1<C: AeadCore + AeadInOut, P: AsyncWrite + Unpin, E: AsyncRead + Unp
 	plain
 		.write_all(buf)
 		.await
-		.map_err(|e| {
+		.inspect_err(|e| {
 			error!("failed to write decrypted payload: {e}");
 		})
 		.ok()
