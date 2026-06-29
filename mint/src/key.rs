@@ -1,10 +1,10 @@
 use log::*;
 
-use aead::{KeyInit, OsRng};
 use base64::prelude::{BASE64_STANDARD_NO_PAD as BASE64, Engine as _};
+use chacha20poly1305::aead::{Generate as _, Key, KeyInit, KeySizeUser};
 
-pub fn gen_psk<C: KeyInit>() -> String {
-	let key = C::generate_key(&mut OsRng);
+pub fn gen_psk<C: KeySizeUser>() -> String {
+	let key = Key::<C>::generate();
 	BASE64.encode(key.as_slice())
 }
 

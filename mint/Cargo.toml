@@ -8,18 +8,21 @@ clap = { version = "4", features = ["derive", "env"] }
 env_logger = "*"
 log = { version = "*", features = ["release_max_level_debug"] }
 
-base64 = "*"
-# chacha does have aead re-exported but it doesn't have the bytes feature
-# chacha 0.11 not stable yet, 0.10 depends on aead 0.5
-chacha20poly1305 = "*"
-aead = { version = "0.5", features = ["bytes"] }
+chacha20poly1305 = { version = "*", default-features = false, features = [
+	"bytes",
+	"getrandom",
+] }
 rand = "*"
+base64 = "*"
 tokio = { version = "1", features = ["macros", "rt", "io-util", "net", "time"] }
 hickory-resolver = { version = "*", default-features = false, features = [
 	"tokio",
 ] }
 
 socks5 = { path = "../socks5" }
+
+[dev-dependencies]
+chacha20poly1305 = { version = "*", default-features = false, features = ["reduced-round"]}
 
 [build-dependencies]
 utils = { path = "../utils" }

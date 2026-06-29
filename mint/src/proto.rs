@@ -1,5 +1,5 @@
-use aead::{
-	AeadCore, AeadInPlace, KeyInit, Nonce, OsRng,
+use chacha20poly1305::aead::{
+	AeadCore, AeadInOut, Generate as _, KeyInit, Nonce,
 	bytes::{BufMut, BytesMut},
 };
 use log::*;
@@ -12,7 +12,7 @@ const REP_OK: u8 = 0;
 
 pub async fn client_handshake<
 	T: AsyncRead + AsyncWrite + Unpin,
-	C: KeyInit + AeadCore + AeadInPlace,
+	C: KeyInit + AeadCore + AeadInOut,
 >(
 	io: &mut T,
 	cipher: &C,
@@ -44,7 +44,7 @@ pub async fn client_handshake<
 
 pub async fn server_handshake<
 	T: AsyncRead + AsyncWrite + Unpin,
-	C: KeyInit + AeadCore + AeadInPlace,
+	C: KeyInit + AeadCore + AeadInOut,
 >(
 	io: &mut T,
 	cipher: &C,
@@ -73,7 +73,7 @@ pub async fn server_handshake<
 }
 
 // can't be implemented on BufMut since we want encrypt in place
-fn write_msg<'a, C: AeadCore + AeadInPlace>(
+fn write_msg<'a, C: AeadCore + AeadInOut>(
 	buf: &mut BytesMut,
 	cipher: &C,
 	header: &[u8],
@@ -81,7 +81,7 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 ) {
 	buf.put_slice(header);
 
-	let nonce = C::generate_nonce(&mut OsRng);
+	let nonce = Nonce::<C>::generate();
 	buf.put_slice(&nonce);
 
 	let payload_offset = buf.len();
@@ -89,7 +89,7 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 	payload.write(&mut *buf);
 
 	// padding
-	buf.put_bytes(rand::random(), rand::random_range(0x200..0x300));
+	buf.put_bytes(rand::random(), rand::random_range(0x100..0x300));
 
 	let mut payload = buf.split_off(payload_offset);
 
@@ -98,7 +98,7 @@ fn write_msg<'a, C: AeadCore + AeadInPlace>(
 	buf.unsplit(payload);
 }
 
-fn read_msg<'a, C: AeadCore + AeadInPlace, T: Payload<'a>>(
+fn read_msg<'a, C: AeadCore + AeadInOut, T: Payload<'a>>(
 	buf: &'a mut BytesMut,
 	cipher: &C,
 ) -> Option<T> {
@@ -118,12 +118,10 @@ fn read_msg<'a, C: AeadCore + AeadInPlace, T: Payload<'a>>(
 		}
 		return None;
 	}
+	// length was checked beforehand, it's safe to unwrap here
+	let nonce = Nonce::<C>::try_from(&buf[nonce_offset..nonce_offset + nonce_size::<C>()]).unwrap();
 	let mut payload = buf.split_off(payload_offset);
-	if let Err(e) = cipher.decrypt_in_place(
-		Nonce::<C>::from_slice(&buf[nonce_offset..nonce_offset + nonce_size::<C>()]),
-		b"",
-		&mut payload,
-	) {
+	if let Err(e) = cipher.decrypt_in_place(&nonce, b"", &mut payload) {
 		debug!("failed to decrypt message, likely invalid: {e}");
 		return None;
 	}
@@ -196,7 +194,7 @@ impl<'a> Payload<'a> for Resp {
 }
 
 // read once from the plain side, encrypt it, write it to the encrypted side
-async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + Unpin>(
+async fn enc1<C: AeadCore + AeadInOut, E: AsyncWrite + Unpin, P: AsyncRead + Unpin>(
 	buf: &mut BytesMut,
 	cipher: &C,
 	encrypted: &mut E,
@@ -222,7 +220,7 @@ async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + U
 		return None;
 	}
 
-	let nonce = C::generate_nonce(&mut OsRng);
+	let nonce = Nonce::<C>::generate();
 	if let Err(e) = cipher.encrypt_in_place(&nonce, b"", &mut payload) {
 		error!("failed to encrypt: {e}");
 		return None;
@@ -242,7 +240,7 @@ async fn enc1<C: AeadCore + AeadInPlace, E: AsyncWrite + Unpin, P: AsyncRead + U
 }
 
 // read one _packet_ from the encrypted side, decrypt it, write it to the plain side
-async fn dec1<C: AeadCore + AeadInPlace, P: AsyncWrite + Unpin, E: AsyncRead + Unpin>(
+async fn dec1<C: AeadCore + AeadInOut, P: AsyncWrite + Unpin, E: AsyncRead + Unpin>(
 	buf: &mut BytesMut,
 	cipher: &C,
 	plain: &mut P,
@@ -287,7 +285,7 @@ async fn dec1<C: AeadCore + AeadInPlace, P: AsyncWrite + Unpin, E: AsyncRead + U
 }
 
 pub async fn duplex<
-	C: AeadCore + AeadInPlace,
+	C: AeadCore + AeadInOut,
 	P: AsyncRead + AsyncWrite + Unpin,
 	E: AsyncRead + AsyncWrite + Unpin,
 >(
@@ -304,7 +302,7 @@ pub async fn duplex<
 }
 
 pub async fn simplex<
-	C: AeadCore + AeadInPlace,
+	C: AeadCore + AeadInOut,
 	F: AsyncFn(&mut BytesMut, &C, &mut W, &mut R) -> Option<()>,
 	W: AsyncWrite + Unpin,
 	R: AsyncRead + Unpin,
@@ -346,8 +344,10 @@ fn obfuscate(a: u16, b: &[u8]) -> u16 {
 
 #[cfg(test)]
 mod test {
-	use aead::{bytes::BytesMut, AeadCore, KeyInit, OsRng};
-	use chacha20poly1305::ChaCha20Poly1305;
+	use chacha20poly1305::{
+		ChaCha8Poly1305 as Cipher,
+		aead::{Generate as _, Key, KeyInit, Nonce, bytes::BytesMut},
+	};
 
 	use super::*;
 
@@ -359,12 +359,12 @@ mod test {
 	fn test_payload() {
 		init();
 
-		let key = ChaCha20Poly1305::generate_key(&mut OsRng);
+		let key = Key::<Cipher>::generate();
 		println!("key len: {}", key.len());
-		let cipher = ChaCha20Poly1305::new(&key);
-		let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
+		let cipher = Cipher::new(&key);
+		let nonce = Nonce::<Cipher>::generate();
 		println!("nonce len: {}", nonce.len());
-		assert_eq!(nonce.len(), nonce_size::<ChaCha20Poly1305>());
+		assert_eq!(nonce.len(), nonce_size::<Cipher>());
 
 		let mut buf = BytesMut::with_capacity(1024);
 		let req = Req("example.com", 443);
@@ -379,8 +379,8 @@ mod test {
 
 		let (mut c, mut s) = tokio::io::duplex(0x500);
 
-		let key = ChaCha20Poly1305::generate_key(&mut OsRng);
-		let cipher = ChaCha20Poly1305::new(&key);
+		let key = Key::<Cipher>::generate();
+		let cipher = Cipher::new(&key);
 
 		tokio::join!(
 			async {
@@ -404,8 +404,8 @@ mod test {
 	async fn test_enc() {
 		init();
 
-		let key = ChaCha20Poly1305::generate_key(&mut OsRng);
-		let cipher = ChaCha20Poly1305::new(&key);
+		let key = Key::<Cipher>::generate();
+		let cipher = Cipher::new(&key);
 
 		let mut buf = BytesMut::with_capacity(0x100);
 		let (mut b, mut a) = tokio::io::simplex(0x100);

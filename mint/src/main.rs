@@ -4,11 +4,10 @@ use std::{
 	str::FromStr,
 };
 
-use aead::bytes::BytesMut;
 use clap::{Parser, Subcommand};
 use log::*;
 
-use chacha20poly1305::ChaCha20Poly1305 as Cipher;
+use chacha20poly1305::{ChaCha20Poly1305 as Cipher, aead::bytes::BytesMut};
 use hickory_resolver as resolver;
 use tokio::net::{TcpListener, TcpSocket, TcpStream, lookup_host};
 
