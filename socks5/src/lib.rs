@@ -4,11 +4,15 @@ mod addr;
 mod client;
 mod common;
 mod server;
-mod utils;
+mod upstream;
 
 pub use addr::Dst;
 pub use client::client_handshake;
 pub use server::server_handshake;
+pub use upstream::Resolver;
+pub use upstream::parse_dns_conf;
+pub use upstream::connect;
+
 
 #[cfg(test)]
 mod tests {

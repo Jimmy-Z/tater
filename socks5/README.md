@@ -1,4 +1,7 @@
 just enough SOCKS5 implementation, tokio based.
+including:
+* client/server library
+* server binary as demonstration
 
 ## limitations
 * only tcp connect
@@ -24,7 +27,7 @@ just enough SOCKS5 implementation, tokio based.
 ## about the not-so-complaint response behavior
 this is mainly for mint client,
 in which socks5 serves as the UA facing protocol.
-in this scenario, the non-complaint response behavior is actually beneficial:
+in this scenario, the non-complaint response behavior is beneficial:
 it reduces connect RTT, since from the point of view of UA,
 the connection is establised in RTT<sub>(1)</sub> of UA - mint client,
 instead of RTT<sub>(2)</sub> of UA - mint client - mint server - dst.

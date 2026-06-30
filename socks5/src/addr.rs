@@ -1,6 +1,6 @@
 use std::{
 	fmt::Display,
-	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+	net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use log::*;
@@ -88,29 +88,6 @@ impl<'a, T: Into<Addr<'a>>> From<(T, u16)> for Dst<'a> {
 		Dst {
 			addr: v.0.into(),
 			port: v.1,
-		}
-	}
-}
-
-// can't impl Into since it's async
-impl<'a> Dst<'a> {
-	// unfortunately tokio doesn't want others to impl ToSockAddrs
-	pub async fn lookup(&self) -> Vec<SocketAddr> {
-		match &self.addr {
-			Addr::Domain(d) => lookup(d, self.port).await,
-			Addr::DomainOwned(d) => lookup(d, self.port).await,
-			Addr::V4(a) => vec![SocketAddr::new(IpAddr::V4(*a), self.port)],
-			Addr::V6(a) => vec![SocketAddr::new(IpAddr::V6(*a), self.port)],
-		}
-	}
-}
-
-async fn lookup(d: &str, port: u16) -> Vec<SocketAddr> {
-	match tokio::net::lookup_host((d, port)).await {
-		Ok(iter) => iter.collect(),
-		Err(e) => {
-			error!("error trying to lookup {d}: {e}");
-			Vec::new()
 		}
 	}
 }

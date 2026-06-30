@@ -115,9 +115,11 @@ async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &st
 	let bind: Option<IpAddr> = if bind.is_empty() {
 		None
 	} else {
-		IpAddr::from_str(bind)
-			.inspect_err(|e| error!("error parsing bind address: {e}"))
-			.ok()
+		Some(
+			IpAddr::from_str(bind)
+				.inspect_err(|e| error!("error parsing bind address: {e}"))
+				.ok()?,
+		)
 	};
 
 	let dns = parse_dns(dns);
