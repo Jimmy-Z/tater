@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use clap::Parser;
 use log::*;
 use tokio::{
 	io::copy_bidirectional,
@@ -7,6 +8,20 @@ use tokio::{
 };
 
 use socks5::server_handshake;
+
+#[derive(Parser)]
+#[command(version = env!("REV"))]
+struct Args {
+	#[clap(short, long, env, default_value = "127.0.0.1:1080")]
+	pub listen: String,
+
+	#[clap(short, long, env, default_value = "")]
+	pub dns: String,
+
+	/// bind address for upstream connections
+	#[clap(short, long, env, default_value = "")]
+	pub bind: String,
+}
 
 #[cfg(debug_assertions)]
 const DEFAULT_LOG_LEVEL: &str = "debug";
@@ -18,12 +33,8 @@ async fn main() {
 	env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(DEFAULT_LOG_LEVEL))
 		.init();
 
-	let args: Vec<String> = std::env::args().collect();
-	if args.len() == 1 {
-		run_local(serv("127.0.0.1:1080")).await;
-	} else {
-		run_local(serv(&args[1])).await;
-	}
+	let args = Args::parse();
+	run_local(serv(args.listen)).await;
 }
 
 async fn serv<T: ToSocketAddrs>(addr: T) {

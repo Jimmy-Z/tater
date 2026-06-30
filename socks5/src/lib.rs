@@ -4,6 +4,7 @@ mod addr;
 mod client;
 mod common;
 mod server;
+mod utils;
 
 pub use addr::Dst;
 pub use client::client_handshake;
