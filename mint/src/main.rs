@@ -8,8 +8,9 @@ use clap::{Parser, Subcommand};
 use log::*;
 
 use chacha20poly1305::{ChaCha20Poly1305 as Cipher, aead::bytes::BytesMut};
-use hickory_resolver as resolver;
-use tokio::net::{TcpListener, TcpSocket, TcpStream, lookup_host};
+use tokio::net::{TcpListener, TcpStream, lookup_host};
+
+use socks5::{Addr, Dst, connect, parse_dns_conf};
 
 mod fake;
 mod key;
@@ -122,10 +123,24 @@ async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &st
 		)
 	};
 
-	let dns = parse_dns(dns);
+	let dns = if dns.is_empty() {
+		None
+	} else {
+		// if it's not empty and parse returns None
+		// we should stop instead of falling back to system resolver
+		Some(parse_dns_conf(dns)?)
+	};
 
-	let l = TcpListener::bind(listen).await.unwrap();
-	info!("listening on {}", l.local_addr().unwrap());
+	let l = TcpListener::bind(listen)
+		.await
+		.inspect_err(|e| error!("error binding to {listen}: {e}"))
+		.ok()?;
+	info!(
+		"listening on {}",
+		l.local_addr()
+			.inspect_err(|e| error!("error getting local address: {e}"))
+			.ok()?
+	);
 
 	while let Ok((mut s, r_addr)) = l.accept().await {
 		let _ = s.set_nodelay(true);
@@ -140,164 +155,34 @@ async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &st
 				return;
 			};
 			drop(buf);
-			info!("{r_addr} -> {host}:{port}");
-			let Some(mut u) = connect(bind, dns, &host, port).await else {
+			let dst = if let Ok(addr) = IpAddr::from_str(&host) {
+				match addr {
+					IpAddr::V4(a) => Dst {
+						addr: Addr::V4(a),
+						port,
+					},
+					IpAddr::V6(a) => Dst {
+						addr: Addr::V6(a),
+						port,
+					},
+				}
+			} else {
+				Dst {
+					addr: Addr::DomainOwned(host),
+					port,
+				}
+			};
+			info!("{r_addr} -> {dst}");
+			let Some(mut u) = connect(bind, dns, &dst).await else {
 				return;
 			};
 			let _ = u.set_nodelay(true);
 			duplex(&cipher, &mut u, &mut s).await;
-			debug!("connection ended: {r_addr} -> {host}:{port}");
+			debug!("connection ended: {r_addr} -> {dst}");
 		});
 	}
 
 	Some(())
-}
-
-async fn connect(
-	bind: Option<IpAddr>,
-	dns: Option<Resolver>,
-	host: &str,
-	port: u16,
-) -> Option<TcpStream> {
-	let addrs: Vec<SocketAddr> = match (dns, bind) {
-		(None, None) => lookup_host(format!("{host}:{port}"))
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.collect(),
-		(None, Some(IpAddr::V4(_))) => lookup_host(format!("{host}:{port}"))
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.filter(SocketAddr::is_ipv4)
-			.collect(),
-		(None, Some(IpAddr::V6(_))) => lookup_host(format!("{host}:{port}"))
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.filter(SocketAddr::is_ipv4)
-			.collect(),
-		(Some(dns), None) => dns
-			.lookup_ip(host)
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.iter()
-			.map(|i| SocketAddr::new(i, port))
-			.collect(),
-		(Some(dns), Some(IpAddr::V4(_))) => dns
-			.ipv4_lookup(host)
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.answers()
-			.iter()
-			.filter_map(|r| match r.data {
-				resolver::proto::rr::RData::A(a) => Some(SocketAddr::new(IpAddr::V4(a.0), port)),
-				_ => None,
-			})
-			.collect(),
-		(Some(dns), Some(IpAddr::V6(_))) => dns
-			.ipv6_lookup(host)
-			.await
-			.inspect_err(|e| {
-				error!("failed to resolve \"{host}\": {e}");
-			})
-			.ok()?
-			.answers()
-			.iter()
-			.filter_map(|r| match r.data {
-				resolver::proto::rr::RData::AAAA(a) => Some(SocketAddr::new(IpAddr::V6(a.0), port)),
-				_ => None,
-			})
-			.collect(),
-	};
-	if addrs.is_empty() {
-		error!("failed to resolve \"{host}\", no addresses");
-		return None;
-	} else {
-		debug!("resolved: {addrs:?}");
-	}
-	match bind {
-		None => TcpStream::connect(addrs.as_slice())
-			.await
-			.inspect_err(|e| {
-				error!("failed to connect to \"{host}\"{addrs:?}: {e}");
-			})
-			.ok(),
-		Some(bind) => {
-			for a in addrs {
-				let s = match bind {
-					IpAddr::V4(_) => TcpSocket::new_v4(),
-					IpAddr::V6(_) => TcpSocket::new_v6(),
-				}
-				.inspect_err(|e| {
-					error!("failed to create socket: {e}");
-				})
-				.ok()?;
-				// reuse addr?
-				s.bind(SocketAddr::new(bind, 0))
-					.inspect_err(|e| {
-						error!("failed to bind to {bind}: {e}");
-					})
-					.ok()?;
-				if let Ok(s) = s.connect(a).await.inspect_err(|e| {
-					error!("failed to connect to \"{host}\"({a}): {e}");
-				}) {
-					return Some(s);
-				}
-			}
-			None
-		}
-	}
-}
-
-type Resolver = resolver::Resolver<resolver::net::runtime::TokioRuntimeProvider>;
-
-fn parse_dns(dns: &str) -> Option<Resolver> {
-	if dns.is_empty() {
-		return None;
-	};
-	let nsc: Vec<_> = dns
-		.split(',')
-		.map(|s| {
-			let mut cc = resolver::config::ConnectionConfig::udp();
-			let addr = if let Ok(a) = SocketAddr::from_str(s) {
-				info!("dns server: {a}");
-				cc.port = a.port();
-				a.ip()
-			} else if let Ok(a) = IpAddr::from_str(s) {
-				info!("dns server: {a}");
-				a
-			} else {
-				panic!("invalid dns server: {s}");
-			};
-			resolver::config::NameServerConfig::new(addr, true, vec![cc])
-		})
-		.collect();
-	let rc = resolver::config::ResolverConfig::from_parts(None, vec![], nsc);
-	let mut b = resolver::Resolver::builder_with_config(
-		rc,
-		resolver::net::runtime::TokioRuntimeProvider::default(),
-	);
-	let ro = b.options_mut();
-	ro.use_hosts_file = resolver::config::ResolveHosts::Never;
-	ro.preserve_intermediates = false;
-	ro.try_tcp_on_error = true;
-
-	b.build()
-		.inspect_err(|e| error!("error initializing resolver: {e}"))
-		.ok()
 }
 
 async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) -> Option<()> {

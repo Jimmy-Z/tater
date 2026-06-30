@@ -6,7 +6,7 @@ mod common;
 mod server;
 mod upstream;
 
-pub use addr::Dst;
+pub use addr::{Dst, Addr};
 pub use client::client_handshake;
 pub use server::server_handshake;
 pub use upstream::Resolver;

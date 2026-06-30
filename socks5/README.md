@@ -1,7 +1,7 @@
 just enough SOCKS5 implementation, tokio based.
 including:
 * client/server library
-* server binary as demonstration
+* server binary as a working demonstration
 
 ## limitations
 * only tcp connect

@@ -15,9 +15,6 @@ chacha20poly1305 = { version = "*", default-features = false, features = [
 rand = { version = "*", default-features = false, features = ["sys_rng"] }
 base64 = "*"
 tokio = { version = "1", features = ["macros", "rt", "io-util", "net", "time"] }
-hickory-resolver = { version = "*", default-features = false, features = [
-	"tokio",
-] }
 
 socks5 = { path = "../socks5" }
 

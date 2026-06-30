@@ -15,7 +15,7 @@ use hickory_resolver::{
 };
 use tokio::net::{TcpSocket, TcpStream, lookup_host};
 
-use crate::{Dst, addr::Addr};
+use crate::{Dst, Addr};
 
 pub type Resolver = resolver::Resolver<TokioRuntimeProvider>;
 
