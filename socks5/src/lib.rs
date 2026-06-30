@@ -9,9 +9,7 @@ mod upstream;
 pub use addr::{Dst, Addr};
 pub use client::client_handshake;
 pub use server::server_handshake;
-pub use upstream::Resolver;
-pub use upstream::parse_dns_conf;
-pub use upstream::connect;
+pub use upstream::{Resolver, listen, connect, parse_bind, parse_dns_conf};
 
 
 #[cfg(test)]

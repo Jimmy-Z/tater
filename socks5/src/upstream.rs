@@ -1,4 +1,5 @@
 // utility functions for upstream connections handling
+// now also includes helper functions for other things, should probably move
 
 use std::{
 	net::{IpAddr, SocketAddr},
@@ -13,9 +14,9 @@ use hickory_resolver::{
 	net::runtime::TokioRuntimeProvider,
 	proto::rr::RData,
 };
-use tokio::net::{TcpSocket, TcpStream, lookup_host};
+use tokio::net::{TcpListener, TcpSocket, TcpStream, lookup_host};
 
-use crate::{Dst, Addr};
+use crate::{Addr, Dst};
 
 pub type Resolver = resolver::Resolver<TokioRuntimeProvider>;
 
@@ -142,7 +143,16 @@ async fn resolve(
 	Some(addrs)
 }
 
-pub fn parse_dns_conf(dns: &str) -> Option<Resolver> {
+// it's double Option for a reason
+// Some(None) means str is empty
+//		mostly likely caller would want to fallback to system resolver
+// None means there's error
+//		for example a typo
+//		in this case, if caller fallbacks, it could be unwanted dns leak
+pub fn parse_dns_conf(dns: &str) -> Option<Option<Resolver>> {
+	if dns.is_empty() {
+		return Some(None);
+	}
 	let mut fautly_conf = false;
 	let nsc: Vec<_> = dns
 		.split(',')
@@ -175,7 +185,37 @@ pub fn parse_dns_conf(dns: &str) -> Option<Resolver> {
 	ro.preserve_intermediates = false;
 	ro.try_tcp_on_error = true;
 
-	b.build()
-		.inspect_err(|e| error!("error initializing resolver: {e}"))
-		.ok()
+	Some(Some(
+		b.build()
+			.inspect_err(|e| error!("error building resolver: {e}"))
+			.ok()?,
+	))
+}
+
+// double Option for the same reason as above
+// to do: test the address is actually bindable to fail early
+// to do: support binding to interface
+pub fn parse_bind(bind: &str) -> Option<Option<IpAddr>> {
+	if bind.is_empty() {
+		return Some(None);
+	}
+	Some(Some(
+		IpAddr::from_str(bind)
+			.inspect_err(|e| error!("error parsing bind address: {e}"))
+			.ok()?,
+	))
+}
+
+pub async fn listen(addr: &str) -> Option<TcpListener> {
+	let l = TcpListener::bind(addr)
+		.await
+		.inspect_err(|e| error!("error listening on {addr}: {e}"))
+		.ok()?;
+	info!(
+		"listening on {}",
+		l.local_addr()
+			.inspect_err(|e| error!("error getting local address: {e}"))
+			.ok()?
+	);
+	Some(l)
 }

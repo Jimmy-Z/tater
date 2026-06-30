@@ -8,9 +8,9 @@ use clap::{Parser, Subcommand};
 use log::*;
 
 use chacha20poly1305::{ChaCha20Poly1305 as Cipher, aead::bytes::BytesMut};
-use tokio::net::{TcpListener, TcpStream, lookup_host};
+use tokio::net::{TcpStream, lookup_host};
 
-use socks5::{Addr, Dst, connect, parse_dns_conf};
+use socks5::{Addr, Dst, connect, listen, parse_bind, parse_dns_conf};
 
 mod fake;
 mod key;
@@ -109,38 +109,15 @@ async fn ls_run(f: impl Future) {
 	ls.run_until(f).await;
 }
 
-async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &str) -> Option<()> {
+async fn server(key: &str, l_addr: &str, bind: &str, dns: &str, fake_header: &str) -> Option<()> {
 	let fake_header = Rc::new(fake::get_fake_header(fake_header));
 	let cipher: Cipher = init_cipher(key)?;
 
-	let bind: Option<IpAddr> = if bind.is_empty() {
-		None
-	} else {
-		Some(
-			IpAddr::from_str(bind)
-				.inspect_err(|e| error!("error parsing bind address: {e}"))
-				.ok()?,
-		)
-	};
+	let bind = parse_bind(bind)?;
 
-	let dns = if dns.is_empty() {
-		None
-	} else {
-		// if it's not empty and parse returns None
-		// we should stop instead of falling back to system resolver
-		Some(parse_dns_conf(dns)?)
-	};
+	let dns = parse_dns_conf(dns)?;
 
-	let l = TcpListener::bind(listen)
-		.await
-		.inspect_err(|e| error!("error binding to {listen}: {e}"))
-		.ok()?;
-	info!(
-		"listening on {}",
-		l.local_addr()
-			.inspect_err(|e| error!("error getting local address: {e}"))
-			.ok()?
-	);
+	let l = listen(l_addr).await?;
 
 	while let Ok((mut s, r_addr)) = l.accept().await {
 		let _ = s.set_nodelay(true);
@@ -185,7 +162,7 @@ async fn server(key: &str, listen: &str, bind: &str, dns: &str, fake_header: &st
 	Some(())
 }
 
-async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) -> Option<()> {
+async fn client(key: &str, l_addr: &str, upstream_str: &str, fake_header: &str) -> Option<()> {
 	let fake_header = Rc::new(fake::get_fake_header(fake_header));
 	let cipher: Cipher = init_cipher(key)?;
 
@@ -208,8 +185,7 @@ async fn client(key: &str, listen: &str, upstream_str: &str, fake_header: &str) 
 	);
 	let upstream = Rc::new(upstream);
 
-	let l = TcpListener::bind(listen).await.unwrap();
-	info!("listening on {}", l.local_addr().unwrap());
+	let l = listen(l_addr).await?;
 
 	while let Ok((mut s, r_addr)) = l.accept().await {
 		let _ = s.set_nodelay(true);

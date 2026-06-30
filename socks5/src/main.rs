@@ -1,16 +1,10 @@
-use std::{
-	net::{IpAddr, SocketAddr},
-	str::FromStr as _,
-};
+use std::net::{IpAddr, SocketAddr};
 
 use clap::Parser;
 use log::*;
-use tokio::{
-	io::copy_bidirectional,
-	net::{TcpListener, TcpStream},
-};
+use tokio::{io::copy_bidirectional, net::TcpStream};
 
-use socks5::{Resolver, connect, parse_dns_conf, server_handshake};
+use socks5::{Resolver, connect, listen, parse_bind, parse_dns_conf, server_handshake};
 
 #[derive(Parser)]
 #[command(version = env!("REV"))]
@@ -40,35 +34,12 @@ async fn main() {
 	run_local(serv(&args.listen, &args.bind, &args.dns)).await;
 }
 
-async fn serv(listen: &str, bind: &str, dns: &str) -> Option<()> {
-	let bind: Option<IpAddr> = if bind.is_empty() {
-		None
-	} else {
-		Some(
-			IpAddr::from_str(bind)
-				.inspect_err(|e| error!("error parsing bind address: {e}"))
-				.ok()?,
-		)
-	};
+async fn serv(l_addr: &str, bind: &str, dns: &str) -> Option<()> {
+	let bind: Option<IpAddr> = parse_bind(bind)?;
 
-	let dns = if dns.is_empty() {
-		None
-	} else {
-		// if it's not empty and parse returns None
-		// we should stop instead of falling back to system resolver
-		Some(parse_dns_conf(dns)?)
-	};
+	let dns = parse_dns_conf(dns)?;
 
-	let l = TcpListener::bind(listen)
-		.await
-		.inspect_err(|e| error!("error binding to {listen}: {e}"))
-		.ok()?;
-	info!(
-		"listening on {}",
-		l.local_addr()
-			.inspect_err(|e| error!("error getting local address: {e}"))
-			.ok()?
-	);
+	let l = listen(l_addr).await?;
 
 	loop {
 		let dns = dns.clone();
